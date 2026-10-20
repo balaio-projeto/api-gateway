@@ -1,22 +1,24 @@
 # Balaio API Gateway
 
-Ponto de entrada HTTP do frontend para os microsserviços. O gateway encaminha chamadas e aplica políticas de borda; regras de negócio e acesso ao banco pertencem aos serviços de domínio.
+Entrada HTTP do frontend para os cinco microsserviços. O gateway encaminha o caminho, o método, a query e os cabeçalhos recebidos. Cada serviço implementa seus contratos e controla seus dados.
 
-## Rotas
+## Destinos configurados
 
-| Método e rota pública | Destino | Estado |
+| Serviço | URL local padrão | Caminhos da Fake API encaminhados |
 | --- | --- | --- |
-| GET /api/v1/pecas | catalog-service | Ativa nesta primeira fatia |
-| GET /api/v1/pecas/{slug} | catalog-service | Planejada |
-| GET /api/v1/referencias | catalog-service | Planejada |
-| /api/v1/auth/**, /api/v1/usuario/**, /api/v1/artesaos/**, /api/v1/coletivos/** | profile-service | Planejadas |
-| /api/v1/checkout, /api/v1/pedidos/**, /api/v1/estado/**, /api/v1/fretes | commerce-service | Planejadas |
-| /api/v1/pecas/{slug}/perguntas, /api/v1/videos/**, /api/v1/admin/mediacoes/** | community-service | Planejadas |
-| /api/v1/eventos/** | events-service | Planejada |
+| catalog-service | http://localhost:8081 | Peças, histórico e relacionadas, peças do artesão, referências e arquivos de fotos |
+| profile-service | http://localhost:8082 | Auth, usuário, conta, artesãos, coletivos, selo, curadoria e histórico de busca |
+| commerce-service | http://localhost:8083 | Checkout, fretes, pedidos, pedidos pendentes, vendas e sacola |
+| community-service | http://localhost:8084 | Perguntas, conversas, avaliações, vídeos, mediações, favoritos e estado dos vídeos |
+| events-service | http://localhost:8085 | Eventos |
 
-As rotas mantêm o prefixo e os parâmetros da Fake API. Operações sociais relacionadas a pedidos pertencem a community-service; os dados transacionais do pedido pertencem a commerce-service.
+Todas as rotas públicas conservam o prefixo `/api/v1`. O catálogo já implementa `GET /api/v1/pecas`. Os outros encaminhamentos apenas preparam a borda: até que o respectivo serviço implemente a rota, a resposta será de rota inexistente nesse serviço.
 
-## Configuração local
+Os caminhos compartilhados são específicos para evitar conflito: `/pecas/{slug}/perguntas` vai para comunicação e as demais rotas de peça vão para catálogo; `/pedidos/{id}/conversa` e `/pedidos/{id}/avaliacao` vão para comunicação e as rotas transacionais de pedido vão para comércio. `GET /api/v1/estado` ainda precisa de um contrato de composição entre sacola, favoritos e histórico antes de ser encaminhado; as rotas `PUT /estado/...` já apontam para os respectivos donos.
+
+As rotas de recomendações por IA e indicadores administrativos ficam para uma etapa posterior, conforme o escopo atual. Ao criar uma rota nova, adicione o caminho ao destino correto em `src/main/resources/application.yaml` e verifique o contrato em `Balaio/Frontend/src/services/api` e `Balaio/Frontend/fake-api/server.cjs`.
+
+## Execução local
 
 Java 25, Maven Wrapper, Spring Boot 4.1.1 e Spring Cloud Gateway Server WebMVC. Porta padrão: 8080.
 
@@ -24,11 +26,17 @@ Java 25, Maven Wrapper, Spring Boot 4.1.1 e Spring Cloud Gateway Server WebMVC. 
 | --- | --- |
 | GATEWAY_PORT | 8080 |
 | CATALOG_SERVICE_URL | http://localhost:8081 |
+| PROFILE_SERVICE_URL | http://localhost:8082 |
+| COMMERCE_SERVICE_URL | http://localhost:8083 |
+| COMMUNITY_SERVICE_URL | http://localhost:8084 |
+| EVENTS_SERVICE_URL | http://localhost:8085 |
 
-No Windows: .\mvnw.cmd spring-boot:run. Em Linux/macOS: ./mvnw spring-boot:run.
+No Windows: `.\mvnw.cmd spring-boot:run`. Em Linux/macOS: `./mvnw spring-boot:run`.
 
-Teste: curl "http://localhost:8080/api/v1/pecas?q=leao&ordenar=preco-asc"
+Teste: `curl "http://localhost:8080/api/v1/pecas?q=leao&ordenar=preco-asc"`
+
 Health: http://localhost:8080/actuator/health
-Frontend: API_GATEWAY_URL=http://localhost:8080/api/v1
 
-Os endereços locais compartilhados e a execução integrada serão consolidados no repositório platform. Não versionar segredos nem acessar diretamente os bancos dos serviços.
+Frontend: `API_GATEWAY_URL=http://localhost:8080/api/v1`
+
+O Compose integrado e a escolha dos serviços a iniciar estão em `platform/docker-compose.yml`. O gateway inicia mesmo quando um serviço opcional está parado; as chamadas destinadas a ele só terão resposta quando o serviço estiver disponível.

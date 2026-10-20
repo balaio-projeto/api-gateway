@@ -8,11 +8,26 @@ spring:
       server:
         webmvc:
           routes:
-            - id: catalog-list
+            - id: catalog
               uri: ${CATALOG_SERVICE_URL:http://localhost:8081}
               predicates:
-                - Path=/api/v1/pecas
-                - Method=GET
+                - Path=/api/v1/pecas,/api/v1/pecas/{slug},/api/v1/pecas/{slug}/historico,/api/v1/pecas/{slug}/relacionadas,/api/v1/artesaos/{slug}/pecas,/api/v1/referencias,/api/v1/arquivos/pecas/{nome}
+            - id: profile
+              uri: ${PROFILE_SERVICE_URL:http://localhost:8082}
+              predicates:
+                - Path=/api/v1/auth/**,/api/v1/usuario,/api/v1/usuario/**,/api/v1/conta/**,/api/v1/artesaos,/api/v1/artesaos/{slug},/api/v1/artesaos/{slug}/configuracoes,/api/v1/artesao/me,/api/v1/artesao/selo,/api/v1/coletivos,/api/v1/coletivos/{slug},/api/v1/admin/curadoria,/api/v1/admin/curadoria/**,/api/v1/estado/historicoBusca
+            - id: commerce
+              uri: ${COMMERCE_SERVICE_URL:http://localhost:8083}
+              predicates:
+                - Path=/api/v1/checkout,/api/v1/fretes,/api/v1/pedidos,/api/v1/pedidos/{id},/api/v1/pedidos/{id}/estado,/api/v1/pedidos/{id}/recusar,/api/v1/pedidos/{id}/cancelar,/api/v1/artesao/pedidos-pendentes,/api/v1/artesao/vendas,/api/v1/estado/sacola
+            - id: community
+              uri: ${COMMUNITY_SERVICE_URL:http://localhost:8084}
+              predicates:
+                - Path=/api/v1/pecas/{slug}/perguntas,/api/v1/pecas/{slug}/perguntas/{id},/api/v1/pedidos/{id}/conversa,/api/v1/pedidos/{id}/avaliacao,/api/v1/artesao/conversas,/api/v1/videos,/api/v1/videos/**,/api/v1/admin/mediacoes,/api/v1/admin/mediacoes/**,/api/v1/estado/favoritos,/api/v1/estado/videosCurtidos,/api/v1/estado/videosSalvos
+            - id: events
+              uri: ${EVENTS_SERVICE_URL:http://localhost:8085}
+              predicates:
+                - Path=/api/v1/eventos,/api/v1/eventos/{slug}
 management:
   endpoints:
     web:
