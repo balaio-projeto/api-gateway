@@ -1,5 +1,13 @@
 server:
   port: ${GATEWAY_PORT:8080}
+  forward-headers-strategy: none
+balaio:
+  gateway:
+    security:
+      public-key-location: ${JWT_PUBLIC_KEY_LOCATION:}
+      issuer: ${JWT_ISSUER:}
+      audience: ${JWT_AUDIENCE:}
+      allowed-origins: ${AUTH_ALLOWED_ORIGINS:}
 spring:
   application:
     name: api-gateway
@@ -7,6 +15,10 @@ spring:
     gateway:
       server:
         webmvc:
+          forwarded-request-headers-filter:
+            enabled: false
+          x-forwarded-request-headers-filter:
+            enabled: false
           routes:
             - id: catalog
               uri: ${CATALOG_SERVICE_URL:http://localhost:8081}
