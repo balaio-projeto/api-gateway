@@ -20,6 +20,11 @@ spring:
               uri: ${COMMERCE_SERVICE_URL:http://localhost:8083}
               predicates:
                 - Path=/api/v1/checkout,/api/v1/fretes,/api/v1/pedidos,/api/v1/pedidos/{id},/api/v1/pedidos/{id}/estado,/api/v1/pedidos/{id}/recusar,/api/v1/pedidos/{id}/cancelar,/api/v1/artesao/pedidos-pendentes,/api/v1/artesao/vendas,/api/v1/estado/sacola
+            - id: commerce-mercado-pago-webhook
+              uri: ${COMMERCE_SERVICE_URL:http://localhost:8083}
+              predicates:
+                - Path=/api/v1/pagamentos/mercado-pago/notificacoes
+                - Method=POST
             - id: community
               uri: ${COMMUNITY_SERVICE_URL:http://localhost:8084}
               predicates:
