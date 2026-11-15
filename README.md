@@ -18,7 +18,7 @@ Os caminhos compartilhados são específicos para evitar conflito: `/pecas/{slug
 
 O webhook do Checkout Pro usa apenas `POST /api/v1/pagamentos/mercado-pago/notificacoes`, encaminhado ao commerce com query `data.id` e cabeçalhos `x-signature`/`x-request-id` intactos. A URL pública configurada no Mercado Pago precisa ser HTTPS e alcançável pelo provedor; o commerce valida a assinatura antes de persistir a notificação. Nenhuma rota interna de serviço é exposta pelo gateway.
 
-As rotas de recomendações por IA e indicadores administrativos ficam para uma etapa posterior, conforme o escopo atual. Ao criar uma rota nova, adicione o caminho ao destino correto em `src/main/resources/application.yaml` e verifique o contrato em `Balaio/Frontend/src/services/api` e `Balaio/Frontend/fake-api/server.cjs`.
+As rotas de recomendações por IA e indicadores administrativos ficam para uma etapa posterior, conforme o escopo atual. Ao criar uma rota nova, adicione o caminho ao destino correto em `src/main/resources/application.yaml` e verifique o contrato em `Balaio-Front/Frontend/src/services/api` e `Balaio-Front/Frontend/fake-api/server.cjs`.
 
 ## Execução local
 
