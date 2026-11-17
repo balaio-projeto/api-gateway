@@ -117,6 +117,24 @@ class ApiGatewayApplicationTests {
         assertThat(recebidaNaEscrita.body()).isEqualTo(sacola);
     }
 
+    @Test
+    void encaminhaRevalidacaoDaSacolaAoCommerceComJwtECorpo() throws Exception {
+        String jwt = token("comprador");
+        var resposta = send("POST", "/api/v1/sacola/revalidar", "{}", "Authorization", "Bearer " + jwt);
+        assertThat(resposta.statusCode()).isEqualTo(200);
+        var recebida = received();
+        assertThat(recebida.service()).isEqualTo("commerce");
+        assertThat(recebida.method()).isEqualTo("POST");
+        assertThat(recebida.rawPath()).isEqualTo("/api/v1/sacola/revalidar");
+        assertThat(recebida.header("Authorization")).containsExactly("Bearer " + jwt);
+        assertThat(recebida.body()).isEqualTo("{}");
+    }
+
+    @Test
+    void revalidacaoDaSacolaExigeLogin() throws Exception {
+        assertError(send("POST", "/api/v1/sacola/revalidar", "{}"), 401, "NAO_AUTENTICADO");
+    }
+
     @ParameterizedTest(name = "{0} preserva {1}")
     @MethodSource("routes")
     void preservaPadroesDeRotaEOsCincoDestinos(String service, String path, String role) throws Exception {
