@@ -79,7 +79,7 @@ class ApiGatewayApplicationTests {
 
     @ParameterizedTest(name = "{0} preserva {1}")
     @MethodSource("routes")
-    void preservaOs45PadroesDeRotaEOsCincoDestinos(String service, String path, String role) throws Exception {
+    void preservaPadroesDeRotaEOsCincoDestinos(String service, String path, String role) throws Exception {
         String jwt = token(role);
         var response = send("GET", path + "?q=leao%20azul&ordem=asc&tag=a&tag=b", null,
                 "Authorization", "Bearer " + jwt, "X-Request-Id", "rota-integracao");
@@ -115,7 +115,6 @@ class ApiGatewayApplicationTests {
                 route("profile", "/api/v1/coletivos/rio", "comprador"),
                 route("profile", "/api/v1/admin/curadoria", "admin"),
                 route("profile", "/api/v1/admin/curadoria/solicitacao", "admin"),
-                route("profile", "/api/v1/estado/historicoBusca", "comprador"),
                 route("commerce", "/api/v1/checkout", "comprador"),
                 route("commerce", "/api/v1/fretes", "comprador"),
                 route("commerce", "/api/v1/pedidos", "comprador"),
@@ -138,6 +137,8 @@ class ApiGatewayApplicationTests {
                 route("community", "/api/v1/estado/favoritos", "comprador"),
                 route("community", "/api/v1/estado/videosCurtidos", "comprador"),
                 route("community", "/api/v1/estado/videosSalvos", "comprador"),
+                route("community", "/api/v1/estado/historicoBusca", "comprador"),
+                route("community", "/api/v1/artesaos/ana/reputacao", "comprador"),
                 route("events", "/api/v1/eventos", "comprador"),
                 route("events", "/api/v1/eventos/feira", "comprador"));
     }
@@ -149,7 +150,8 @@ class ApiGatewayApplicationTests {
             "/api/v1/artesaos/ana/pecas", "/api/v1/coletivos", "/api/v1/coletivos/rio",
             "/api/v1/referencias", "/api/v1/arquivos/pecas/jarra.jpg", "/api/v1/fretes",
             "/api/v1/eventos", "/api/v1/eventos/feira", "/api/v1/videos", "/api/v1/videos/video",
-            "/api/v1/videos/video/comentarios" })
+            "/api/v1/videos/video/comentarios", "/api/v1/videos/video/arquivo", "/api/v1/videos/video/capa",
+            "/api/v1/artesaos/ana/reputacao" })
     void permiteGetPublicoSemCredenciais(String path) throws Exception {
         assertThat(send("GET", path, null).statusCode()).isEqualTo(200);
         assertThat(received().header("Authorization")).isEmpty();

@@ -59,11 +59,11 @@ final class GatewayAccessPolicy {
             }
         }
         if (read && (path.matches("/api/v1/pecas(?:/[^/]+(?:/(?:historico|relacionadas|perguntas))?)?")
-                || path.matches("/api/v1/artesaos(?:/[^/]+(?:/pecas)?)?")
+                || path.matches("/api/v1/artesaos(?:/[^/]+(?:/(?:pecas|reputacao))?)?")
                 || path.matches("/api/v1/coletivos(?:/[^/]+)?")
                 || path.equals("/api/v1/referencias") || path.matches("/api/v1/arquivos/pecas/[^/]+")
                 || path.matches("/api/v1/eventos(?:/[^/]+)?")
-                || path.matches("/api/v1/videos(?:/[^/]+(?:/comentarios)?)?")
+                || path.matches("/api/v1/videos(?:/[^/]+(?:/(?:comentarios|arquivo|capa))?)?")
                 || path.equals("/api/v1/fretes") || path.equals("/api/v1/estado"))) {
             return Access.PUBLIC;
         }

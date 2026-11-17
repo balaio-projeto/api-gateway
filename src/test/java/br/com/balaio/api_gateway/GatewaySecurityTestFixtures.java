@@ -19,6 +19,8 @@ import com.nimbusds.jose.Payload;
 import com.nimbusds.jose.crypto.MACSigner;
 import com.nimbusds.jose.crypto.RSASSASigner;
 
+import org.springframework.test.context.DynamicPropertyRegistry;
+
 /** Emissor de teste isolado: a chave privada existe apenas em memoria. */
 final class GatewaySecurityTestFixtures {
     static final String ISSUER = "https://profile.example.test";
@@ -30,6 +32,13 @@ final class GatewaySecurityTestFixtures {
     private static final Path PUBLIC_KEY = writePublicKey(KEYS);
 
     private GatewaySecurityTestFixtures() { }
+
+    static void registrarSeguranca(DynamicPropertyRegistry propriedades) {
+        propriedades.add("balaio.gateway.security.public-key-location", GatewaySecurityTestFixtures::publicKeyLocation);
+        propriedades.add("balaio.gateway.security.issuer", () -> ISSUER);
+        propriedades.add("balaio.gateway.security.audience", () -> AUDIENCE);
+        propriedades.add("balaio.gateway.security.allowed-origins", () -> ORIGIN + "," + SECOND_ORIGIN);
+    }
 
     static String publicKeyLocation() { return PUBLIC_KEY.toUri().toString(); }
     static String publicKeyPath() { return PUBLIC_KEY.toString(); }
