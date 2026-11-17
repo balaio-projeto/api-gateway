@@ -35,6 +35,7 @@ class CommunityRoutingIntegrationTests {
         iniciarServicosFalsos();
         registro.add("COMMUNITY_SERVICE_URL", () -> "http://localhost:" + community.getAddress().getPort());
         registro.add("PROFILE_SERVICE_URL", () -> "http://localhost:" + profile.getAddress().getPort());
+        GatewaySecurityTestFixtures.registrarSeguranca(registro);
     }
 
     private static synchronized void iniciarServicosFalsos() {
@@ -90,7 +91,8 @@ class CommunityRoutingIntegrationTests {
     }
 
     private HttpResponse<String> get(String caminho) throws Exception {
-        return CLIENTE.send(HttpRequest.newBuilder(URI.create("http://localhost:" + portaGateway + caminho)).GET()
+        return CLIENTE.send(HttpRequest.newBuilder(URI.create("http://localhost:" + portaGateway + caminho))
+                .header("Authorization", "Bearer " + GatewaySecurityTestFixtures.token("admin")).GET()
                 .build(), HttpResponse.BodyHandlers.ofString());
     }
 }
