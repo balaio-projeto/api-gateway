@@ -20,6 +20,8 @@ O webhook do Checkout Pro usa apenas `POST /api/v1/pagamentos/mercado-pago/notif
 
 As rotas de recomendações por IA e indicadores administrativos ficam para uma etapa posterior, conforme o escopo atual. Ao criar uma rota nova, adicione o caminho ao destino correto em `src/main/resources/application.yaml` e verifique o contrato em `Balaio-Front/Frontend/src/services/api` e `Balaio-Front/Frontend/fake-api/server.cjs`.
 
+`GET` e `PUT /api/v1/estado/sacola` são encaminhados ao commerce com `Authorization` e o corpo preservados. `GET /api/v1/estado` agregado permanece no adaptador do frontend/Fake API; o Gateway não o envia ao commerce.
+
 ## Execução local
 
 Java 25, Maven Wrapper, Spring Boot 4.1.1 e Spring Cloud Gateway Server WebMVC. Porta padrão: 8080.

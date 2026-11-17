@@ -33,6 +33,17 @@ class ApiGatewayApplicationTests {
             requisicao.sendResponseHeaders(200, -1);
             requisicao.close();
         });
+        destino.createContext("/api/v1/estado/sacola", requisicao -> {
+            var corpo = new String(requisicao.getRequestBody().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            recebida.set(requisicao.getRequestMethod() + " " + requisicao.getRequestURI() + " "
+                    + requisicao.getRequestHeaders().getFirst("Authorization") + " " + corpo);
+            var resposta = "{\"dados\":[{\"slug\":\"peca-teste\",\"quantidade\":1}],\"erro\":null}"
+                    .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            requisicao.getResponseHeaders().set("Content-Type", "application/json");
+            requisicao.sendResponseHeaders(200, resposta.length);
+            requisicao.getResponseBody().write(resposta);
+            requisicao.close();
+        });
         destino.start();
         propriedades.add("COMMERCE_SERVICE_URL", () -> "http://127.0.0.1:" + destino.getAddress().getPort());
     }
@@ -54,5 +65,27 @@ class ApiGatewayApplicationTests {
 		assertThat(resposta.statusCode()).isEqualTo(200);
 		assertThat(recebida.get()).isEqualTo("POST /api/v1/pagamentos/mercado-pago/notificacoes?data.id=123 ts=123,v1=abc request-teste");
 	}
+
+    @Test
+    void encaminhaLeituraEEscritaDaSacolaSemCapturarEstadoAgregado() throws Exception {
+        var cliente = HttpClient.newHttpClient();
+        var uri = URI.create("http://127.0.0.1:" + porta + "/api/v1/estado/sacola");
+        var get = cliente.send(HttpRequest.newBuilder(uri).header("Authorization", "Bearer comprador-a")
+                .GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertThat(get.statusCode()).isEqualTo(200);
+        assertThat(get.body()).contains("peca-teste", "\"erro\":null");
+        assertThat(recebida.get()).isEqualTo("GET /api/v1/estado/sacola Bearer comprador-a ");
+        var put = cliente.send(HttpRequest.newBuilder(uri).header("Authorization", "Bearer comprador-b")
+                .header("Content-Type", "application/json")
+                .PUT(HttpRequest.BodyPublishers.ofString("{\"sacola\":[{\"slug\":\"peca-teste\",\"quantidade\":1}]}"))
+                .build(), HttpResponse.BodyHandlers.ofString());
+        assertThat(put.statusCode()).isEqualTo(200);
+        assertThat(put.body()).contains("peca-teste", "\"erro\":null");
+        assertThat(recebida.get()).contains("PUT /api/v1/estado/sacola Bearer comprador-b {\"sacola\":");
+        var agregado = cliente.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + porta + "/api/v1/estado"))
+                .GET().build(), HttpResponse.BodyHandlers.ofString());
+        assertThat(agregado.statusCode()).isEqualTo(404);
+        assertThat(recebida.get()).contains("PUT /api/v1/estado/sacola Bearer comprador-b");
+    }
 
 }
