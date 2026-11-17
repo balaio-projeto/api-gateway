@@ -44,6 +44,17 @@ class ApiGatewayApplicationTests {
             requisicao.getResponseBody().write(resposta);
             requisicao.close();
         });
+        destino.createContext("/api/v1/sacola/revalidar", requisicao -> {
+            var corpo = new String(requisicao.getRequestBody().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            recebida.set(requisicao.getRequestMethod() + " " + requisicao.getRequestURI() + " "
+                    + requisicao.getRequestHeaders().getFirst("Authorization") + " " + corpo);
+            var resposta = "{\"dados\":{\"itens\":[],\"podeProsseguir\":false},\"erro\":null}"
+                    .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            requisicao.getResponseHeaders().set("Content-Type", "application/json");
+            requisicao.sendResponseHeaders(200, resposta.length);
+            requisicao.getResponseBody().write(resposta);
+            requisicao.close();
+        });
         destino.start();
         propriedades.add("COMMERCE_SERVICE_URL", () -> "http://127.0.0.1:" + destino.getAddress().getPort());
     }
@@ -86,6 +97,20 @@ class ApiGatewayApplicationTests {
                 .GET().build(), HttpResponse.BodyHandlers.ofString());
         assertThat(agregado.statusCode()).isEqualTo(404);
         assertThat(recebida.get()).contains("PUT /api/v1/estado/sacola Bearer comprador-b");
+    }
+
+    @Test
+    void encaminhaRevalidacaoDaSacolaComJwtCorpoEResposta() throws Exception {
+        var requisicao = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + porta
+                + "/api/v1/sacola/revalidar"))
+                .header("Authorization", "Bearer comprador-a")
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString("{}"))
+                .build();
+        var resposta = HttpClient.newHttpClient().send(requisicao, HttpResponse.BodyHandlers.ofString());
+        assertThat(resposta.statusCode()).isEqualTo(200);
+        assertThat(resposta.body()).contains("\"podeProsseguir\":false", "\"erro\":null");
+        assertThat(recebida.get()).isEqualTo("POST /api/v1/sacola/revalidar Bearer comprador-a {}");
     }
 
 }
