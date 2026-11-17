@@ -77,6 +77,26 @@ class ApiGatewayApplicationTests {
         assertThat(RECEIVED).isEmpty();
     }
 
+    @Test
+    void encaminhaWebhookDoMercadoPagoSemJwtComAssinaturaEQuery() throws Exception {
+        var response = send("POST", "/api/v1/pagamentos/mercado-pago/notificacoes?data.id=123", "{}",
+                "x-signature", "ts=123,v1=abc", "x-request-id", "request-teste");
+        assertThat(response.statusCode()).isEqualTo(200);
+        var request = received();
+        assertThat(request.service()).isEqualTo("commerce");
+        assertThat(request.method()).isEqualTo("POST");
+        assertThat(request.rawPath()).isEqualTo("/api/v1/pagamentos/mercado-pago/notificacoes");
+        assertThat(request.rawQuery()).isEqualTo("data.id=123");
+        assertThat(request.header("x-signature")).containsExactly("ts=123,v1=abc");
+        assertThat(request.header("x-request-id")).containsExactly("request-teste");
+        assertThat(request.header("Authorization")).isEmpty();
+    }
+
+    @Test
+    void webhookDoMercadoPagoNaoAceitaOutrosMetodos() throws Exception {
+        assertError(send("GET", "/api/v1/pagamentos/mercado-pago/notificacoes", null), 401, "NAO_AUTENTICADO");
+    }
+
     @ParameterizedTest(name = "{0} preserva {1}")
     @MethodSource("routes")
     void preservaPadroesDeRotaEOsCincoDestinos(String service, String path, String role) throws Exception {
