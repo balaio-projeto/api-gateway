@@ -97,6 +97,26 @@ class ApiGatewayApplicationTests {
         assertError(send("GET", "/api/v1/pagamentos/mercado-pago/notificacoes", null), 401, "NAO_AUTENTICADO");
     }
 
+    @Test
+    void encaminhaLeituraEEscritaDaSacolaComJwtECorpo() throws Exception {
+        String jwt = token("comprador");
+        var leitura = send("GET", "/api/v1/estado/sacola", null, "Authorization", "Bearer " + jwt);
+        assertThat(leitura.statusCode()).isEqualTo(200);
+        var recebidaNaLeitura = received();
+        assertThat(recebidaNaLeitura.service()).isEqualTo("commerce");
+        assertThat(recebidaNaLeitura.method()).isEqualTo("GET");
+        assertThat(recebidaNaLeitura.header("Authorization")).containsExactly("Bearer " + jwt);
+
+        String sacola = "{\"sacola\":[{\"slug\":\"peca-teste\",\"quantidade\":1}]}";
+        var escrita = send("PUT", "/api/v1/estado/sacola", sacola, "Authorization", "Bearer " + jwt);
+        assertThat(escrita.statusCode()).isEqualTo(200);
+        var recebidaNaEscrita = received();
+        assertThat(recebidaNaEscrita.service()).isEqualTo("commerce");
+        assertThat(recebidaNaEscrita.method()).isEqualTo("PUT");
+        assertThat(recebidaNaEscrita.header("Authorization")).containsExactly("Bearer " + jwt);
+        assertThat(recebidaNaEscrita.body()).isEqualTo(sacola);
+    }
+
     @ParameterizedTest(name = "{0} preserva {1}")
     @MethodSource("routes")
     void preservaPadroesDeRotaEOsCincoDestinos(String service, String path, String role) throws Exception {
