@@ -35,6 +35,7 @@ class CatalogRoutingIntegrationTests {
     static void catalogDestination(DynamicPropertyRegistry registry) {
         ensureCatalogStarted();
         registry.add("CATALOG_SERVICE_URL", () -> "http://localhost:" + catalog.getAddress().getPort());
+        GatewaySecurityTestFixtures.registrarSeguranca(registry);
     }
 
     private static synchronized void ensureCatalogStarted() {
