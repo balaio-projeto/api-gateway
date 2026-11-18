@@ -186,10 +186,12 @@ class ApiGatewayApplicationTests {
                 route("community", "/api/v1/pecas/jarra/perguntas", "comprador"),
                 route("community", "/api/v1/pecas/jarra/perguntas/123", "comprador"),
                 route("community", "/api/v1/pedidos/123/conversa", "comprador"),
+                route("community", "/api/v1/pedidos/123/conversa/leitura", "comprador"),
                 route("community", "/api/v1/pedidos/123/avaliacao", "comprador"),
                 route("community", "/api/v1/artesao/conversas", "artesao"),
                 route("community", "/api/v1/videos", "comprador"),
                 route("community", "/api/v1/videos/video/comentarios", "comprador"),
+                route("community", "/api/v1/videos/video/visualizacoes", "comprador"),
                 route("community", "/api/v1/admin/mediacoes", "admin"),
                 route("community", "/api/v1/admin/mediacoes/123", "admin"),
                 route("community", "/api/v1/estado/favoritos", "comprador"),
@@ -217,6 +219,7 @@ class ApiGatewayApplicationTests {
 
     @ParameterizedTest
     @CsvSource({ "POST,/api/v1/eventos", "POST,/api/v1/videos", "POST,/api/v1/videos/video/comentarios",
+            "POST,/api/v1/videos/video/visualizacoes",
             "PUT,/api/v1/estado/sacola", "PUT,/api/v1/estado/favoritos", "PUT,/api/v1/estado/historicoBusca",
             "PUT,/api/v1/estado/videosCurtidos", "PUT,/api/v1/estado/videosSalvos" })
     void preservaOperacoesPublicasEEstadoDeVisitante(String method, String path) throws Exception {
@@ -230,7 +233,8 @@ class ApiGatewayApplicationTests {
 
     @ParameterizedTest
     @ValueSource(strings = { "/api/v1/usuario", "/api/v1/conta/senha", "/api/v1/pedidos",
-            "/api/v1/pedidos/123/conversa", "/api/v1/pedidos/123/avaliacao", "/api/v1/artesao/me",
+            "/api/v1/pedidos/123/conversa", "/api/v1/pedidos/123/conversa/leitura", "/api/v1/pedidos/123/avaliacao",
+            "/api/v1/artesao/me",
             "/api/v1/artesaos/ana/configuracoes", "/api/v1/admin/curadoria", "/api/v1/admin/mediacoes",
             "/api/v1/auth/rota-nao-publica" })
     void exigeAutenticacaoNasRotasProtegidas(String path) throws Exception {

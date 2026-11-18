@@ -68,7 +68,7 @@ final class GatewayAccessPolicy {
             return Access.PUBLIC;
         }
         if (("POST".equals(method) && (path.equals("/api/v1/eventos") || path.equals("/api/v1/videos")
-                || path.matches("/api/v1/videos/[^/]+/comentarios")
+                || path.matches("/api/v1/videos/[^/]+/(comentarios|visualizacoes)")
                 || path.equals("/api/v1/pagamentos/mercado-pago/notificacoes")))
                 || ("PUT".equals(method) && path.matches(
                         "/api/v1/estado/(sacola|favoritos|historicoBusca|videosCurtidos|videosSalvos)"))) {
