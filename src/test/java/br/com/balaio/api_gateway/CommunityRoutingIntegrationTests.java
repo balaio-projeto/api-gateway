@@ -78,6 +78,9 @@ class CommunityRoutingIntegrationTests {
         "/api/v1/artesaos/artesao-123/reputacao",
         "/api/v1/pecas/vaso/perguntas",
         "/api/v1/pedidos/abc/conversa",
+        "/api/v1/pedidos/abc/conversa/leitura",
+        "/api/v1/videos/abc/visualizacoes",
+        "/api/v1/admin/mediacoes/abc/reprocessar-entrega",
         "/api/v1/videos/abc/arquivo",
         "/api/v1/admin/mediacoes/abc/decisao"
     })
