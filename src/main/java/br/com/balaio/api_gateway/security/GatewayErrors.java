@@ -21,6 +21,10 @@ final class GatewayErrors {
                 code = "SEM_PERMISSAO";
                 message = "Você não tem permissão para continuar.";
             }
+            case 413 -> {
+                code = "ARQUIVO_MUITO_GRANDE";
+                message = "Requisicao multipart limitada a 3 MiB.";
+            }
             default -> {
                 status = 401;
                 code = "NAO_AUTENTICADO";
