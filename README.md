@@ -70,7 +70,7 @@ O decoder usa chave local fixa e aceita somente **RS256**. Verifica assinatura e
 - Depois da validação, encaminha **um** `Authorization: Bearer <JWT>` e remove o cookie de autenticação. Preserva outros cookies, incluindo `balaio_cliente`, e respostas `Set-Cookie` dos serviços.
 - Remove headers de identidade controlados pelo cliente, incluindo famílias `X-User-*`, `X-Account-*`, `X-Role*`, `X-Auth*`, `X-Papel`, `X-Identity*` e equivalentes. `Forwarded`/`X-Forwarded-*` recebidos também são removidos; não substituem identidade nem origem confiável. A fonte de autenticação é o JWT validado.
 
-Os POSTs exatos de `/auth/cadastro`, `/auth/login`, `/auth/entrar`, `/auth/recuperacao` e `/auth/logout` são anônimos. Neles, credenciais anteriores são ignoradas e removidas antes do encaminhamento, inclusive tokens inválidos/expirados e cookies legados duplicados; isso permite recuperar o login e limpar a sessão. O controle Origin/cookie ocorre **antes** dessa remoção. Não há liberação genérica de `/auth/**`.
+Os POSTs exatos de `/auth/cadastro`, `/auth/login`, `/auth/entrar`, `/auth/recuperacao`, `/auth/redefinicao` e `/auth/logout` são anônimos. Neles, credenciais anteriores são ignoradas e removidas antes do encaminhamento, inclusive tokens inválidos/expirados e cookies legados duplicados; isso permite recuperar o login e limpar a sessão. O controle Origin/cookie ocorre **antes** dessa remoção. Não há liberação genérica de `/auth/**`.
 
 Nas demais rotas públicas, credenciais são opcionais, mas, quando fornecidas, precisam ser válidas. A borda não encaminha uma credencial inválida apenas porque a leitura seria pública.
 
@@ -91,12 +91,12 @@ As regras dependem de **método e caminho**, sem alterar os destinos do YAML:
 - Leituras documentadas de catálogo, perguntas da peça, artesãos, coletivos, referências, imagens, fretes, eventos, vídeos e comentários são públicas. HEAD acompanha GET. Não há wildcard de leitura que abra rotas privadas de painel/configuração.
 - Conta, endereços, pedidos, checkout, conversas e avaliações exigem autenticação. A propriedade do recurso deve ser verificada no serviço.
 - Painel `/artesao/*`, configurações do ateliê, criação/edição/exclusão de peças, respostas a perguntas e transições artesanais de pedido exigem artesão. PATCH de perfil de artesão admite artesão ou admin, conforme PI-171; isso não dispensa a verificação de posse.
-- Administração exige admin, **exceto POST exato `/admin/mediacoes`**, que exige autenticação e pertence ao fluxo de abertura de mediação do comprador. GET/PATCH da administração continuam restritos.
-- POST de eventos, vídeos e comentários, além dos PUTs de estado de visitante, permanecem públicos conforme o contrato atual. PI-169/PI-210 devem fechar a evolução dessas permissões; esta etapa não inventa um novo requisito de organizador.
+- Administração exige admin, com duas exceções exatas: POST `/admin/mediacoes` mantém a autenticação existente para abertura (o Community exige comprador); GET `/admin/mediacoes` admite comprador ou admin. O Community filtra as mediações do comprador pelo usuário autenticado. PATCH e POST de decisão/reprocessamento continuam exclusivos de admin.
+- POST `/videos` exige artesão; POST `/videos/{id}/comentarios` e PUT das coleções `favoritos`, `historicoBusca`, `videosCurtidos` e `videosSalvos` exigem autenticação. PUT `/estado/sacola` exige comprador, conforme o Commerce. Dados de visitante permanecem no frontend, sem escrita anônima nesses serviços. POST de visualizações e webhook permanecem públicos, com validações próprias no serviço. POST `/eventos` permanece inalterado e pendente de PI-210; não representa autorização para criar eventos no backend.
 - GET `/videos?painel=true` exige artesão porque inclui rascunhos no painel; a regra verifica todos os valores do parâmetro para evitar ambiguidade. Esta proteção é uma inferência explícita do uso pela UI, não uma transformação de toda leitura de vídeos em privada.
 - Caminhos ambíguos na API, como percent-encoding no caminho, matrix parameters, barras duplicadas e traversal, são recusados com 400. Query params continuam preservados. Rotas novas não herdam acesso público automaticamente.
 
-`GET /estado` continua sem destino/composição. A listagem GET `/admin/mediacoes` é administrativa no contrato; o formulário de comprador que hoje a chama precisará de alinhamento no frontend, sem abrir uma listagem global pela borda.
+`GET /estado` continua sem destino/composição. GET `/admin/mediacoes` encaminha a identidade validada ao Community: comprador consulta apenas seus registros; admin consulta a visão administrativa. O Gateway não consulta banco nem decide propriedade.
 
 Rejeições do gateway usam `{dados:null,erro:{codigo,mensagem}}`: **401 / NAO_AUTENTICADO**, **403 / SEM_PERMISSAO** ou **400 / REQUISICAO_INVALIDA** para credenciais/caminhos ambíguos. Respostas de negócio dos serviços são preservadas. Health/info permanecem locais e públicos.
 
@@ -107,3 +107,49 @@ Gateway validado não substitui revalidação e autorização nos serviços. A e
 Com JDK 25 no `JAVA_HOME`, execute `.\mvnw.cmd -B -ntp clean verify`. Os testes geram RSA em execução, gravam somente a pública temporária para o gateway e usam cinco upstreams HTTP locais controlados. Não dependem de Docker, banco ou serviços de negócio reais. A chave privada do emissor de teste fica em memória, sem fixture privada versionada.
 
 O teste cobre 45 exemplos de roteamento, JWT, Cookie/Bearer, falsificação de identidade, CORS/preflight, CSRF, política de papéis e configuração obrigatória. Isso comprova comportamento da borda e o encaminhamento HTTP; não comprova ownership ou revalidação nos serviços ainda pendentes.
+
+
+## PI-169 — Etapa 1: autorização pontual
+
+Branch `feat/pi-169-gateway-autorizacao`, baseada na develop `ec9e07b`.
+Esta entrega não incorpora o commit do PI-214 nem modifica JWT, filtros,
+CORS/Origin, encaminhamento Bearer, destinos ou endpoints de negócio.
+
+Fontes das decisões:
+
+- [PI-169](https://projeto-fds-cesar.atlassian.net/browse/PI-169): papel no Gateway e autorização de negócio no serviço dono.
+- [PI-168](https://projeto-fds-cesar.atlassian.net/browse/PI-168) e [PI-261](https://projeto-fds-cesar.atlassian.net/browse/PI-261): contrato JWT, cookie/Bearer e erros 401/403 preservados.
+- [PI-249](https://projeto-fds-cesar.atlassian.net/browse/PI-249) e [PI-207](https://projeto-fds-cesar.atlassian.net/browse/PI-207): roteamento por domínio e escrita autenticada/autorizada.
+- `community-service/MediacoesController`: GET permite comprador/admin; filtragem é do Community.
+- `community-service/VideoService`: criação de vídeo exige artesão; comentários e coleções recebem usuário autenticado.
+- `commerce-service/SacolaController`: alteração da sacola exige comprador e usa o sub validado.
+- `profile-service/RecoveryController` e `RecoveryService`: redefinição usa token de recuperação, não exige sessão JWT.
+
+A exceção anônima de redefinição é somente POST `/api/v1/auth/redefinicao`.
+O corpo e a resposta do Profile são preservados: o Gateway não valida o token de
+recuperação. Cookies antigos continuam sujeitos a Origin antes de serem removidos.
+Outros métodos, subcaminhos e alteração da própria senha não são liberados.
+
+Validação em 19/11/2026 com JDK 25:
+
+- Novos cenários contra a política anterior: 14 falhas, sem erros de execução.
+- `./mvnw.cmd -B -ntp verify`: 274 testes, zero falhas/erros/ignorados.
+- Profile `RecoveryIntegrationTest`: 5 testes aprovados com PostgreSQL 18
+  descartável; token válido, expirado, desconhecido e reutilização verificados.
+  Nenhum banco persistente da aplicação é utilizado por esse teste.
+- Compatibilidade com PI-214: cópia temporária fora do repositório com a política
+  PI-169 e os arquivos de mídia de `4968af4`; `clean verify` aprovou 282 testes,
+  incluindo os 8 de `GatewayMediaHttpTests`. Nenhum merge/commit foi realizado.
+
+Os testes do Gateway usam servidor real em porta aleatória, JWT assinado RS256
+e upstreams HTTP controlados. Não demonstram filtragem de dados pelo Community;
+essa responsabilidade permanece no serviço e em seus testes.
+
+Pendências: identidade de organizador e POST `/eventos` (PI-210); revisão de
+permissões administrativas de peças com o Catalog; validação completa nos demais
+serviços nas próximas etapas do PI-169. POST de abertura de mediação mantém a
+política anterior na borda; a restrição a comprador continua no Community.
+
+
+Relatorio consolidado da implementacao distribuida do PI-169, matriz e evidencias:
+[docs/pi-169-autorizacao.md](docs/pi-169-autorizacao.md).

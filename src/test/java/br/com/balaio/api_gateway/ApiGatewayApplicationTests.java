@@ -218,10 +218,7 @@ class ApiGatewayApplicationTests {
     }
 
     @ParameterizedTest
-    @CsvSource({ "POST,/api/v1/eventos", "POST,/api/v1/videos", "POST,/api/v1/videos/video/comentarios",
-            "POST,/api/v1/videos/video/visualizacoes",
-            "PUT,/api/v1/estado/sacola", "PUT,/api/v1/estado/favoritos", "PUT,/api/v1/estado/historicoBusca",
-            "PUT,/api/v1/estado/videosCurtidos", "PUT,/api/v1/estado/videosSalvos" })
+    @CsvSource({ "POST,/api/v1/eventos", "POST,/api/v1/videos/video/visualizacoes" })
     void preservaOperacoesPublicasEEstadoDeVisitante(String method, String path) throws Exception {
         var response = send(method, path, "{\"valor\":\"ação\"}", "Cookie", "balaio_cliente=visitante:123");
         assertThat(response.statusCode()).isEqualTo(200);
@@ -409,7 +406,7 @@ class ApiGatewayApplicationTests {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = { "cadastro", "login", "entrar", "recuperacao", "logout" })
+    @ValueSource(strings = { "cadastro", "login", "entrar", "recuperacao", "redefinicao", "logout" })
     void authPublicoIgnoraCredenciaisAntigasEPassaRespostaDoProfile(String operation) throws Exception {
         var response = send("POST", "/api/v1/auth/" + operation, "{\"email\":\"pessoa@example.test\"}",
                 "Authorization", "Bearer expirado", "Cookie", "balaio_sessao=invalido; balaio_cliente=visitante:123", "Origin", ORIGIN);
@@ -444,7 +441,7 @@ class ApiGatewayApplicationTests {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = { "cadastro", "login", "entrar", "recuperacao", "logout" })
+    @ValueSource(strings = { "cadastro", "login", "entrar", "recuperacao", "redefinicao", "logout" })
     void authComCookieExigeOriginAntesDeRemoverCookie(String operation) throws Exception {
         assertError(send("POST", "/api/v1/auth/" + operation, "{}", "Cookie", "balaio_sessao=invalido"), 403, "SEM_PERMISSAO");
     }
@@ -533,7 +530,9 @@ class ApiGatewayApplicationTests {
     }
 
     @ParameterizedTest
-    @CsvSource({ "GET,/api/v1/admin/curadoria", "GET,/api/v1/admin/curadoria/123", "GET,/api/v1/admin/mediacoes", "PATCH,/api/v1/admin/mediacoes/123" })
+    @CsvSource({ "GET,/api/v1/admin/curadoria", "GET,/api/v1/admin/curadoria/123",
+            "PATCH,/api/v1/admin/mediacoes/123", "POST,/api/v1/admin/mediacoes/123/decisao",
+            "POST,/api/v1/admin/mediacoes/123/reprocessar-entrega" })
     void administracaoExigeAdmin(String method, String path) throws Exception {
         assertError(send(method, path, "{}", "Authorization", "Bearer " + token("comprador")), 403, "SEM_PERMISSAO");
         assertThat(send(method, path, "{}", "Authorization", "Bearer " + token("admin")).statusCode()).isEqualTo(200);
@@ -545,6 +544,81 @@ class ApiGatewayApplicationTests {
         assertError(send("POST", "/api/v1/admin/mediacoes", "{}"), 401, "NAO_AUTENTICADO");
         assertThat(send("POST", "/api/v1/admin/mediacoes", "{}", "Authorization", "Bearer " + token("comprador")).statusCode()).isEqualTo(200);
         assertThat(received().service()).isEqualTo("community");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "comprador", "admin" })
+    void consultaDeMediacoesPermiteCompradorEAdminPreservandoIdentidade(String role) throws Exception {
+        String jwt = token(role);
+        var response = send("GET", "/api/v1/admin/mediacoes?pagina=1&tamanho=10", null,
+                "Authorization", "Bearer " + jwt, "X-User-Id", "outro", "X-Role", "admin");
+        assertThat(response.statusCode()).isEqualTo(200);
+        var request = received();
+        assertThat(request.service()).isEqualTo("community");
+        assertThat(request.rawQuery()).isEqualTo("pagina=1&tamanho=10");
+        assertThat(request.header("Authorization")).containsExactly("Bearer " + jwt);
+        assertThat(request.header("X-User-Id")).isEmpty();
+        assertThat(request.header("X-Role")).isEmpty();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "artesao", "organizador" })
+    void consultaDeMediacoesRecusaOutrosPapeis(String role) throws Exception {
+        assertError(send("GET", "/api/v1/admin/mediacoes", null,
+                "Authorization", "Bearer " + token(role)), 403, "SEM_PERMISSAO");
+    }
+
+    @Test
+    void redefinicaoSemSessaoEncaminhaTokenDeRecuperacaoNoCorpoAoProfile() throws Exception {
+        String body = "{\"token\":\"token-de-recuperacao-de-teste\",\"novaSenha\":\"SenhaDeTeste123!\"}";
+        assertThat(send("POST", "/api/v1/auth/redefinicao", body).statusCode()).isEqualTo(200);
+        var request = received();
+        assertThat(request.service()).isEqualTo("profile");
+        assertThat(request.body()).isEqualTo(body);
+        assertThat(request.header("Authorization")).isEmpty();
+    }
+
+    @ParameterizedTest
+    @CsvSource({ "GET,/api/v1/auth/redefinicao", "POST,/api/v1/auth/redefinicao/extra",
+            "POST,/api/v1/auth/alterar-senha" })
+    void excecaoDeRedefinicaoNaoAbreOutrosMetodosOuCaminhos(String method, String path) throws Exception {
+        assertError(send(method, path, "{}"), 401, "NAO_AUTENTICADO");
+    }
+
+    @Test
+    void redefinicaoComCookieAntigoAindaExigeOriginPermitido() throws Exception {
+        assertError(send("POST", "/api/v1/auth/redefinicao", "{}",
+                "Cookie", "balaio_sessao=expirada"), 403, "SEM_PERMISSAO");
+    }
+
+    @ParameterizedTest
+    @CsvSource({ "POST,/api/v1/videos", "POST,/api/v1/videos/video/comentarios",
+            "PUT,/api/v1/estado/sacola", "PUT,/api/v1/estado/favoritos", "PUT,/api/v1/estado/historicoBusca",
+            "PUT,/api/v1/estado/videosCurtidos", "PUT,/api/v1/estado/videosSalvos" })
+    void escritasDeUsuarioRecusamVisitanteMesmoComCookieDeVisitante(String method, String path) throws Exception {
+        assertError(send(method, path, "{}", "Cookie", "balaio_cliente=visitante:123"), 401, "NAO_AUTENTICADO");
+    }
+
+    @ParameterizedTest
+    @CsvSource({ "POST,/api/v1/videos,artesao,community", "POST,/api/v1/videos/video/comentarios,comprador,community",
+            "PUT,/api/v1/estado/sacola,comprador,commerce", "PUT,/api/v1/estado/favoritos,comprador,community",
+            "PUT,/api/v1/estado/historicoBusca,artesao,community", "PUT,/api/v1/estado/videosCurtidos,admin,community",
+            "PUT,/api/v1/estado/videosSalvos,comprador,community" })
+    void escritasAutorizadasPreservamBearerCorpoEDestino(String method, String path, String role, String service) throws Exception {
+        String jwt = token(role);
+        assertThat(send(method, path, "{}", "Authorization", "Bearer " + jwt).statusCode()).isEqualTo(200);
+        var request = received();
+        assertThat(request.service()).isEqualTo(service);
+        assertThat(request.method()).isEqualTo(method);
+        assertThat(request.body()).isEqualTo("{}");
+        assertThat(request.header("Authorization")).containsExactly("Bearer " + jwt);
+    }
+
+    @ParameterizedTest
+    @CsvSource({ "POST,/api/v1/videos,comprador", "POST,/api/v1/videos,admin",
+            "PUT,/api/v1/estado/sacola,artesao", "PUT,/api/v1/estado/sacola,admin" })
+    void escritasComPapelInadequadoRetornam403(String method, String path, String role) throws Exception {
+        assertError(send(method, path, "{}", "Authorization", "Bearer " + token(role)), 403, "SEM_PERMISSAO");
     }
 
     @ParameterizedTest
