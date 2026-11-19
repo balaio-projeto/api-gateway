@@ -107,13 +107,51 @@ Gateway validado não substitui revalidação e autorização nos serviços. A e
 Com JDK 25 no `JAVA_HOME`, execute `.\mvnw.cmd -B -ntp clean verify`. Os testes geram RSA em execução, gravam somente a pública temporária para o gateway e usam cinco upstreams HTTP locais controlados. Não dependem de Docker, banco ou serviços de negócio reais. A chave privada do emissor de teste fica em memória, sem fixture privada versionada.
 
 O teste cobre 45 exemplos de roteamento, JWT, Cookie/Bearer, falsificação de identidade, CORS/preflight, CSRF, política de papéis e configuração obrigatória. Isso comprova comportamento da borda e o encaminhamento HTTP; não comprova ownership ou revalidação nos serviços ainda pendentes.
+# Midias do perfil - PI-214, Etapa 4
 
+Branch `feat/PI-214-profile-media-http`, baseada em
+`origin/feat/PI-168-api-gateway-jwt-security` no commit `f7357ce`.
+Essa base inclui os filtros JWT, cookies e CORS usados no ambiente local.
+O remoto `main` possui outra linha de testes do catalogo. Coordenar a integracao
+das branches com o PI-168 antes de abrir o PR para a base definitiva.
+
+As rotas de Profile incluem `/api/v1/artesao/me/imagem` e
+`/api/v1/arquivos/perfis/{midiaId}`. PUT multipart (campo `arquivo`) e DELETE
+exigem artesao autenticado. GET e HEAD de arquivos sao publicos, com vinculo
+atual e MIME validados pelo Profile. Corpos binarios e cabecalhos de seguranca
+sao encaminhados pelo proxy existente. Credenciais S3 pertencem ao Profile.
+
+O gateway conserva o encaminhamento em streaming do WebMVC. O filtro de tamanho
+atua depois da autenticacao, somente no PUT de imagem, e retorna 413 no envelope
+existente quando Content-Length supera 3 MiB. O Profile aplica o limite real
+de 2 MiB por arquivo e 3 MiB por multipart, inclusive sem Content-Length.
+As propriedades `spring.servlet.multipart` isoladamente nao aplicam limites ao
+proxy streaming do Gateway 5.0.3. A validacao de tipo e pixels ocorre no Profile.
+
+Execute `./mvnw test` com Java 25. `GatewayMediaHttpTests` verifica Bearer/cookie,
+autorizacao, multipart binario, chunked, rejeicao antecipada por tamanho e
+leitura publica GET/HEAD com Content-Type, Content-Length e nosniff preservados.
+
+Validacao em 13/11/2026 com Java 25. A suite concluiu com 231 testes, zero falhas/erros e zero ignorados. A integracao real pelo gateway passou com upload WebP, substituicao PNG, hashes identicos, HEAD publico, bloqueio das URLs anteriores/removidas e rejeicao 413 para chunked acima dos limites no Profile.
+
+## Integracao PI-214 sobre develop — 19/11/2026
+
+Base ec9e07b: foram mantidas todas as rotas e permissoes atuais, incluindo
+historicoBusca no Community, reputacao, leitura de conversa, visualizacoes de
+videos e webhook Mercado Pago. Foram acrescentadas somente as rotas de imagem
+do Profile, sua leitura publica especifica e limite declarado de 3 MiB no PUT.
+Build limpo e suite completa: 259 testes, zero falhas/erros/ignorados.
+Nao foram alterados algoritmos JWT, chaves ou permissoes de outros dominios.
+O frontend PI-214 ja esta na develop pelo PR 33. A publicacao conjunta ainda
+requer o Profile e o provisionamento consumidor do Platform.
 
 ## PI-169 — Etapa 1: autorização pontual
 
 Branch `feat/pi-169-gateway-autorizacao`, baseada na develop `ec9e07b`.
-Esta entrega não incorpora o commit do PI-214 nem modifica JWT, filtros,
-CORS/Origin, encaminhamento Bearer, destinos ou endpoints de negócio.
+A etapa inicial foi isolada do PI-214. A reconciliacao com a develop `084fae7`
+preserva agora as duas entregas: midia do PI-214 e autorizacao do PI-169.
+As correcoes do PI-169 preservam JWT, CORS/Origin e encaminhamento Bearer;
+nao criam destinos ou endpoints de negocio.
 
 Fontes das decisões:
 

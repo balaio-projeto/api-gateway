@@ -54,6 +54,13 @@ public class GatewaySecurityConfiguration {
         return registration;
     }
 
+    @Bean
+    FilterRegistrationBean<GatewayMediaSizeFilter> gatewayMediaSizeFilter() {
+        var registration = new FilterRegistrationBean<>(new GatewayMediaSizeFilter());
+        registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 2);
+        return registration;
+    }
+
     private RSAPublicKey readPublicKey(String location) {
         try {
             // Only a filesystem path or a local file URI is accepted; never resolve resources or URLs.
