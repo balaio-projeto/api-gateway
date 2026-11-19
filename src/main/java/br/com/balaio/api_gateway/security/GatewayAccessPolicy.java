@@ -7,16 +7,14 @@ import jakarta.servlet.http.HttpServletRequest;
 
 final class GatewayAccessPolicy {
     private static final Set<String> AUTH_ACTIONS = Set.of("/api/v1/auth/cadastro", "/api/v1/auth/login",
-            "/api/v1/auth/entrar", "/api/v1/auth/recuperacao", "/api/v1/auth/redefinicao", "/api/v1/auth/logout");
+            "/api/v1/auth/entrar", "/api/v1/auth/recuperacao", "/api/v1/auth/logout");
 
     enum Access {
-        PUBLIC, AUTHENTICATED, COMPRADOR, COMPRADOR_OR_ADMIN, ARTESAO, ARTESAO_OR_ADMIN, ADMIN;
+        PUBLIC, AUTHENTICATED, ARTESAO, ARTESAO_OR_ADMIN, ADMIN;
 
         boolean accepts(String role) {
             return switch (this) {
                 case PUBLIC, AUTHENTICATED -> true;
-                case COMPRADOR -> "comprador".equals(role);
-                case COMPRADOR_OR_ADMIN -> "comprador".equals(role) || "admin".equals(role);
                 case ARTESAO -> "artesao".equals(role);
                 case ARTESAO_OR_ADMIN -> "artesao".equals(role) || "admin".equals(role);
                 case ADMIN -> "admin".equals(role);
@@ -34,10 +32,6 @@ final class GatewayAccessPolicy {
         if (authAction(method, path)) {
             return Access.PUBLIC;
         }
-        // Only the collection GET is shared; ownership remains in Community.
-        if (path.equals("/api/v1/admin/mediacoes") && "GET".equals(method)) {
-            return Access.COMPRADOR_OR_ADMIN;
-        }
         if (path.equals("/api/v1/admin/mediacoes") && "POST".equals(method)) {
             return Access.AUTHENTICATED;
         }
@@ -51,10 +45,7 @@ final class GatewayAccessPolicy {
         if ("PATCH".equals(method) && path.matches("/api/v1/artesaos/[^/]+")) {
             return Access.ARTESAO_OR_ADMIN;
         }
-        if ("PUT".equals(method) && path.equals("/api/v1/estado/sacola")) {
-            return Access.COMPRADOR;
-        }
-        if (("POST".equals(method) && (path.equals("/api/v1/pecas") || path.equals("/api/v1/videos")))
+        if (("POST".equals(method) && path.equals("/api/v1/pecas"))
                 || (Set.of("PATCH", "DELETE").contains(method) && path.matches("/api/v1/pecas/[^/]+"))
                 || ("PATCH".equals(method) && (path.matches("/api/v1/pedidos/[^/]+/(estado|recusar)")
                         || path.matches("/api/v1/pecas/[^/]+/perguntas/[^/]+")))) {
@@ -76,9 +67,11 @@ final class GatewayAccessPolicy {
                 || path.equals("/api/v1/fretes") || path.equals("/api/v1/estado"))) {
             return Access.PUBLIC;
         }
-        if ("POST".equals(method) && (path.equals("/api/v1/eventos")
-                || path.matches("/api/v1/videos/[^/]+/visualizacoes")
-                || path.equals("/api/v1/pagamentos/mercado-pago/notificacoes"))) {
+        if (("POST".equals(method) && (path.equals("/api/v1/eventos") || path.equals("/api/v1/videos")
+                || path.matches("/api/v1/videos/[^/]+/(comentarios|visualizacoes)")
+                || path.equals("/api/v1/pagamentos/mercado-pago/notificacoes")))
+                || ("PUT".equals(method) && path.matches(
+                        "/api/v1/estado/(sacola|favoritos|historicoBusca|videosCurtidos|videosSalvos)"))) {
             return Access.PUBLIC;
         }
         return Access.AUTHENTICATED;
