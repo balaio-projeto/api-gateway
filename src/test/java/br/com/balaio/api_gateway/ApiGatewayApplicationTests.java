@@ -95,6 +95,35 @@ class ApiGatewayApplicationTests {
     }
 
     @Test
+    void encaminhaGestaoDePedidosDoArtesaoComJwtECorpo() throws Exception {
+        String jwt = token("artesao");
+        var lista = send("GET", "/api/v1/artesao/pedidos-pendentes?artesao=forjado", null,
+                "Authorization", "Bearer " + jwt);
+        assertThat(lista.statusCode()).isEqualTo(200);
+        assertThat(lista.body()).contains("\"dados\"", "\"erro\":null");
+        var leitura = received();
+        assertThat(leitura.service()).isEqualTo("commerce");
+        assertThat(leitura.method()).isEqualTo("GET");
+        assertThat(leitura.rawPath()).isEqualTo("/api/v1/artesao/pedidos-pendentes");
+        assertThat(leitura.rawQuery()).isEqualTo("artesao=forjado");
+        assertThat(leitura.header("Authorization")).containsExactly("Bearer " + jwt);
+
+        String corpo = "{\"estado\":\"producao\"}";
+        var alteracao = send("PATCH", "/api/v1/pedidos/123/estado", corpo,
+                "Authorization", "Bearer " + jwt);
+        assertThat(alteracao.statusCode()).isEqualTo(200);
+        assertThat(alteracao.body()).contains("\"dados\"", "\"erro\":null");
+        var escrita = received();
+        assertThat(escrita.service()).isEqualTo("commerce");
+        assertThat(escrita.method()).isEqualTo("PATCH");
+        assertThat(escrita.rawPath()).isEqualTo("/api/v1/pedidos/123/estado");
+        assertThat(escrita.header("Authorization")).containsExactly("Bearer " + jwt);
+        assertThat(escrita.body()).isEqualTo(corpo);
+        assertError(send("GET", "/api/v1/artesao/pedidos-pendentes", null), 401, "NAO_AUTENTICADO");
+        assertError(send("PATCH", "/api/v1/pedidos/123/estado", corpo), 401, "NAO_AUTENTICADO");
+    }
+
+    @Test
     void fotoPublicaAceitaHeadMasEscritaExigeAutenticacao() throws Exception {
         String path = "/api/v1/arquivos/perfis/12345678-1234-1234-1234-123456789abc";
         assertThat(send("HEAD", path, null).statusCode()).isEqualTo(200);

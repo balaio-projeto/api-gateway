@@ -22,6 +22,8 @@ As rotas de recomendações por IA e indicadores administrativos ficam para uma 
 
 `GET` e `PUT /api/v1/estado/sacola` e `POST /api/v1/sacola/revalidar` são encaminhados ao commerce com `Authorization` e o corpo preservados. A revalidação consulta preço e disponibilidade atuais da sacola autenticada sem reservar peças. `GET /api/v1/estado` agregado permanece no adaptador do frontend/Fake API; o Gateway não o envia ao commerce.
 
+`GET /api/v1/artesao/pedidos-pendentes` e `PATCH /api/v1/pedidos/{id}/estado` são encaminhados ao commerce com o JWT; o PATCH preserva `{ "estado": "producao" }` e o envelope `{dados,erro}`. O commerce verifica papel e titularidade.
+
 ## Execução local
 
 Java 25, Maven Wrapper, Spring Boot 4.1.1 e Spring Cloud Gateway Server WebMVC. Porta padrão: 8080.
