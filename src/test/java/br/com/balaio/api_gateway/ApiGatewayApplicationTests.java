@@ -78,6 +78,33 @@ class ApiGatewayApplicationTests {
     }
 
     @Test
+    void encaminhaMultipartDaFotoSemAlterarConteudo() throws Exception {
+        String body = "--foto-boundary\r\nContent-Disposition: form-data; name=\"arquivo\"; filename=\"foto.png\"\r\n"
+                + "Content-Type: image/png\r\n\r\nconteudo-da-imagem\r\n--foto-boundary--\r\n";
+        var response = send("PUT", "/api/v1/artesao/me/imagem", body,
+                "Authorization", "Bearer " + token("artesao"),
+                "Content-Type", "multipart/form-data; boundary=foto-boundary");
+        assertThat(response.statusCode()).isEqualTo(200);
+        var request = received();
+        assertThat(request.service()).isEqualTo("profile");
+        assertThat(request.body()).isEqualTo(body);
+        var contentType = org.springframework.http.MediaType.parseMediaType(request.header("Content-Type").getFirst());
+        assertThat(contentType.getType()).isEqualTo("multipart");
+        assertThat(contentType.getSubtype()).isEqualTo("form-data");
+        assertThat(contentType.getParameter("boundary")).isEqualTo("foto-boundary");
+    }
+
+    @Test
+    void fotoPublicaAceitaHeadMasEscritaExigeAutenticacao() throws Exception {
+        String path = "/api/v1/arquivos/perfis/12345678-1234-1234-1234-123456789abc";
+        assertThat(send("HEAD", path, null).statusCode()).isEqualTo(200);
+        assertThat(received().service()).isEqualTo("profile");
+        assertError(send("PUT", path, "{}"), 401, "NAO_AUTENTICADO");
+        assertError(send("PUT", "/api/v1/artesao/me/imagem", "{}"), 401, "NAO_AUTENTICADO");
+        assertThat(RECEIVED).isEmpty();
+    }
+
+    @Test
     void encaminhaWebhookDoMercadoPagoSemJwtComAssinaturaEQuery() throws Exception {
         var response = send("POST", "/api/v1/pagamentos/mercado-pago/notificacoes?data.id=123", "{}",
                 "x-signature", "ts=123,v1=abc", "x-request-id", "request-teste");
@@ -168,6 +195,8 @@ class ApiGatewayApplicationTests {
                 route("profile", "/api/v1/artesaos/ana", "comprador"),
                 route("profile", "/api/v1/artesaos/ana/configuracoes", "artesao"),
                 route("profile", "/api/v1/artesao/me", "artesao"),
+                route("profile", "/api/v1/artesao/me/imagem", "artesao"),
+                route("profile", "/api/v1/arquivos/perfis/12345678-1234-1234-1234-123456789abc", "comprador"),
                 route("profile", "/api/v1/artesao/selo", "artesao"),
                 route("profile", "/api/v1/coletivos", "comprador"),
                 route("profile", "/api/v1/coletivos/rio", "comprador"),
@@ -211,7 +240,8 @@ class ApiGatewayApplicationTests {
             "/api/v1/referencias", "/api/v1/arquivos/pecas/jarra.jpg", "/api/v1/fretes",
             "/api/v1/eventos", "/api/v1/eventos/feira", "/api/v1/videos", "/api/v1/videos/video",
             "/api/v1/videos/video/comentarios", "/api/v1/videos/video/arquivo", "/api/v1/videos/video/capa",
-            "/api/v1/artesaos/ana/reputacao" })
+            "/api/v1/artesaos/ana/reputacao",
+            "/api/v1/arquivos/perfis/12345678-1234-1234-1234-123456789abc" })
     void permiteGetPublicoSemCredenciais(String path) throws Exception {
         assertThat(send("GET", path, null).statusCode()).isEqualTo(200);
         assertThat(received().header("Authorization")).isEmpty();
@@ -516,7 +546,7 @@ class ApiGatewayApplicationTests {
     }
 
     @ParameterizedTest
-    @CsvSource({ "GET,/api/v1/artesao/me", "GET,/api/v1/artesaos/ana/configuracoes", "POST,/api/v1/pecas",
+    @CsvSource({ "PUT,/api/v1/artesao/me/imagem", "DELETE,/api/v1/artesao/me/imagem", "GET,/api/v1/artesao/me", "GET,/api/v1/artesaos/ana/configuracoes", "POST,/api/v1/pecas",
             "PATCH,/api/v1/pecas/jarra", "DELETE,/api/v1/pecas/jarra", "PATCH,/api/v1/pecas/jarra/perguntas/123",
             "PATCH,/api/v1/pedidos/123/estado", "PATCH,/api/v1/pedidos/123/recusar" })
     void operacoesDoAtelieExigemArtesao(String method, String path) throws Exception {
