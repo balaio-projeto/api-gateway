@@ -7,7 +7,7 @@ import jakarta.servlet.http.HttpServletRequest;
 
 final class GatewayAccessPolicy {
     private static final Set<String> AUTH_ACTIONS = Set.of("/api/v1/auth/cadastro", "/api/v1/auth/login",
-            "/api/v1/auth/entrar", "/api/v1/auth/recuperacao", "/api/v1/auth/logout");
+            "/api/v1/auth/entrar", "/api/v1/auth/recuperacao", "/api/v1/auth/redefinicao", "/api/v1/auth/logout");
 
     enum Access {
         PUBLIC, AUTHENTICATED, ARTESAO, ARTESAO_OR_ADMIN, ADMIN;

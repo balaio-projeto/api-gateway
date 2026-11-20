@@ -439,7 +439,7 @@ class ApiGatewayApplicationTests {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = { "cadastro", "login", "entrar", "recuperacao", "logout" })
+    @ValueSource(strings = { "cadastro", "login", "entrar", "recuperacao", "redefinicao", "logout" })
     void authPublicoIgnoraCredenciaisAntigasEPassaRespostaDoProfile(String operation) throws Exception {
         var response = send("POST", "/api/v1/auth/" + operation, "{\"email\":\"pessoa@example.test\"}",
                 "Authorization", "Bearer expirado", "Cookie", "balaio_sessao=invalido; balaio_cliente=visitante:123", "Origin", ORIGIN);
@@ -449,6 +449,25 @@ class ApiGatewayApplicationTests {
         assertThat(request.service()).isEqualTo("profile");
         assertThat(request.header("Authorization")).isEmpty();
         assertThat(request.header("Cookie")).containsExactly("balaio_cliente=visitante:123");
+    }
+
+    @Test
+    void redefinicaoAnonimaPreservaCorpoEEncaminhaAoProfile() throws Exception {
+        String body = "{\"token\":\"token-sintetico\",\"novaSenha\":\"NovaSenhaSegura123!\"}";
+        assertThat(send("POST", "/api/v1/auth/redefinicao", body).statusCode()).isEqualTo(200);
+        var request = received();
+        assertThat(request.service()).isEqualTo("profile");
+        assertThat(request.body()).isEqualTo(body);
+        assertThat(request.header("Authorization")).isEmpty();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "GET /api/v1/auth/redefinicao", "PATCH /api/v1/auth/redefinicao",
+            "POST /api/v1/auth/alterar-senha", "POST /api/v1/auth/redefinicao/extra" })
+    void redefinicaoPublicaNaoLiberaOutrosMetodosOuRotas(String operation) throws Exception {
+        String[] parts = operation.split(" ", 2);
+        assertError(send(parts[0], parts[1], null), 401, "NAO_AUTENTICADO");
+        assertThat(RECEIVED).isEmpty();
     }
 
     @Test
@@ -474,7 +493,7 @@ class ApiGatewayApplicationTests {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = { "cadastro", "login", "entrar", "recuperacao", "logout" })
+    @ValueSource(strings = { "cadastro", "login", "entrar", "recuperacao", "redefinicao", "logout" })
     void authComCookieExigeOriginAntesDeRemoverCookie(String operation) throws Exception {
         assertError(send("POST", "/api/v1/auth/" + operation, "{}", "Cookie", "balaio_sessao=invalido"), 403, "SEM_PERMISSAO");
     }
