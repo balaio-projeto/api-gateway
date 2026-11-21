@@ -124,6 +124,39 @@ class ApiGatewayApplicationTests {
     }
 
     @Test
+    void encaminhaAcompanhamentoEConversaSemPublicarParticipantesInternos() throws Exception {
+        String jwt = token("comprador");
+        for (String caminho : List.of("/api/v1/pedidos", "/api/v1/pedidos/123")) {
+            var resposta = send("GET", caminho, null, "Authorization", "Bearer " + jwt);
+            assertThat(resposta.statusCode()).isEqualTo(200);
+            var recebido = received();
+            assertThat(recebido.service()).isEqualTo("commerce");
+            assertThat(recebido.rawPath()).isEqualTo(caminho);
+            assertThat(recebido.header("Authorization")).containsExactly("Bearer " + jwt);
+        }
+        var leitura = send("GET", "/api/v1/pedidos/123/conversa", null,
+                "Authorization", "Bearer " + jwt);
+        assertThat(leitura.statusCode()).isEqualTo(200);
+        assertThat(leitura.body()).contains("\"dados\"", "\"erro\":null");
+        var recebida = received();
+        assertThat(recebida.service()).isEqualTo("community");
+        assertThat(recebida.method()).isEqualTo("GET");
+        assertThat(recebida.header("Authorization")).containsExactly("Bearer " + jwt);
+        String corpo = "{\"texto\":\"Olá\"}";
+        var envio = send("POST", "/api/v1/pedidos/123/conversa", corpo,
+                "Authorization", "Bearer " + jwt, "Idempotency-Key", "envio-123");
+        assertThat(envio.statusCode()).isEqualTo(200);
+        var escrita = received();
+        assertThat(escrita.service()).isEqualTo("community");
+        assertThat(escrita.method()).isEqualTo("POST");
+        assertThat(escrita.body()).isEqualTo(corpo);
+        assertThat(escrita.header("Authorization")).containsExactly("Bearer " + jwt);
+        assertThat(escrita.header("Idempotency-Key")).containsExactly("envio-123");
+        assertThat(send("GET", "/internal/v1/pedidos/123/participantes", null,
+                "Authorization", "Bearer " + jwt).statusCode()).isEqualTo(404);
+    }
+
+    @Test
     void fotoPublicaAceitaHeadMasEscritaExigeAutenticacao() throws Exception {
         String path = "/api/v1/arquivos/perfis/12345678-1234-1234-1234-123456789abc";
         assertThat(send("HEAD", path, null).statusCode()).isEqualTo(200);
