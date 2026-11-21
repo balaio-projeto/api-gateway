@@ -24,6 +24,8 @@ As rotas de recomendações por IA e indicadores administrativos ficam para uma 
 
 `GET /api/v1/artesao/pedidos-pendentes` e `PATCH /api/v1/pedidos/{id}/estado` são encaminhados ao commerce com o JWT; o PATCH preserva `{ "estado": "producao" }` e o envelope `{dados,erro}`. O commerce verifica papel e titularidade.
 
+O acompanhamento `GET /api/v1/pedidos` e `GET /api/v1/pedidos/{id}` segue para commerce; `GET/POST /api/v1/pedidos/{id}/conversa` segue para community, preservando Authorization e corpo. O contrato interno de participantes do commerce não é encaminhado pelo Gateway.
+
 ## Execução local
 
 Java 25, Maven Wrapper, Spring Boot 4.1.1 e Spring Cloud Gateway Server WebMVC. Porta padrão: 8080.
