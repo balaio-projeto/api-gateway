@@ -98,6 +98,7 @@ As regras dependem de **método e caminho**, sem alterar os destinos do YAML:
 - Administração exige admin, **exceto POST exato `/admin/mediacoes`**, que exige autenticação e pertence ao fluxo de abertura de mediação do comprador. GET/PATCH da administração continuam restritos.
 - POST de eventos, vídeos e comentários, além dos PUTs de estado de visitante, permanecem públicos conforme o contrato atual. PI-169/PI-210 devem fechar a evolução dessas permissões; esta etapa não inventa um novo requisito de organizador.
 - GET `/videos?painel=true` exige artesão porque inclui rascunhos no painel; a regra verifica todos os valores do parâmetro para evitar ambiguidade. Esta proteção é uma inferência explícita do uso pela UI, não uma transformação de toda leitura de vídeos em privada.
+- GET/HEAD `/artesaos/{slug}/pecas/painel` encaminha ao catálogo e exige artesão autenticado (PI-196). O catálogo verifica o slug e a posse pelo JWT. A rota `/artesaos/{slug}/pecas` continua pública e não expõe os estados privados de reserva/venda, mesmo com sessão.
 - Caminhos ambíguos na API, como percent-encoding no caminho, matrix parameters, barras duplicadas e traversal, são recusados com 400. Query params continuam preservados. Rotas novas não herdam acesso público automaticamente.
 
 `GET /estado` continua sem destino/composição. A listagem GET `/admin/mediacoes` é administrativa no contrato; o formulário de comprador que hoje a chama precisará de alinhamento no frontend, sem abrir uma listagem global pela borda.

@@ -23,7 +23,7 @@ spring:
             - id: catalog
               uri: ${CATALOG_SERVICE_URL:http://localhost:8081}
               predicates:
-                - Path=/api/v1/pecas,/api/v1/pecas/{slug},/api/v1/pecas/{slug}/historico,/api/v1/pecas/{slug}/relacionadas,/api/v1/artesaos/{slug}/pecas,/api/v1/referencias,/api/v1/arquivos/pecas/{nome}
+                - Path=/api/v1/pecas,/api/v1/pecas/{slug},/api/v1/pecas/{slug}/historico,/api/v1/pecas/{slug}/relacionadas,/api/v1/artesaos/{slug}/pecas,/api/v1/artesaos/{slug}/pecas/painel,/api/v1/referencias,/api/v1/arquivos/pecas/{nome}
             - id: profile
               uri: ${PROFILE_SERVICE_URL:http://localhost:8082}
               predicates:

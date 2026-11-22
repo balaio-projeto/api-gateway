@@ -247,6 +247,7 @@ class ApiGatewayApplicationTests {
                 route("catalog", "/api/v1/pecas/jarra/historico", "comprador"),
                 route("catalog", "/api/v1/pecas/jarra/relacionadas", "comprador"),
                 route("catalog", "/api/v1/artesaos/ana/pecas", "comprador"),
+                route("catalog", "/api/v1/artesaos/ana/pecas/painel", "artesao"),
                 route("catalog", "/api/v1/referencias", "comprador"),
                 route("catalog", "/api/v1/arquivos/pecas/jarra.jpg", "comprador"),
                 route("profile", "/api/v1/auth/contrato-futuro", "comprador"),
@@ -627,13 +628,33 @@ class ApiGatewayApplicationTests {
     }
 
     @ParameterizedTest
-    @CsvSource({ "PUT,/api/v1/artesao/me/imagem", "DELETE,/api/v1/artesao/me/imagem", "GET,/api/v1/artesao/me", "GET,/api/v1/artesaos/ana/configuracoes", "POST,/api/v1/pecas",
+    @CsvSource({ "GET,/api/v1/artesao/me", "GET,/api/v1/artesaos/ana/configuracoes",
+            "GET,/api/v1/artesaos/ana/pecas/painel", "PUT,/api/v1/artesao/me/imagem",
+            "DELETE,/api/v1/artesao/me/imagem", "POST,/api/v1/pecas",
             "PATCH,/api/v1/pecas/jarra", "DELETE,/api/v1/pecas/jarra", "PATCH,/api/v1/pecas/jarra/perguntas/123",
             "PATCH,/api/v1/pedidos/123/estado", "PATCH,/api/v1/pedidos/123/recusar" })
     void operacoesDoAtelieExigemArtesao(String method, String path) throws Exception {
         assertError(send(method, path, "{}", "Authorization", "Bearer " + token("comprador")), 403, "SEM_PERMISSAO");
         assertThat(send(method, path, "{}", "Authorization", "Bearer " + token("artesao")).statusCode()).isEqualTo(200);
         received();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "GET", "HEAD" })
+    void painelDePecasExigeArtesaoEEncaminhaSessaoAoCatalogo(String method) throws Exception {
+        String path = "/api/v1/artesaos/ana/pecas/painel";
+        assertThat(send(method, path, null).statusCode()).isEqualTo(401);
+        for (String role : List.of("comprador", "admin")) {
+            assertThat(send(method, path, null, "Authorization", "Bearer " + token(role)).statusCode())
+                    .isEqualTo(403);
+        }
+        assertThat(RECEIVED).isEmpty();
+        String jwt = token("artesao");
+        assertThat(send(method, path, null, "Cookie", "balaio_sessao=" + jwt).statusCode()).isEqualTo(200);
+        var request = received();
+        assertThat(request.service()).isEqualTo("catalog");
+        assertThat(request.rawPath()).isEqualTo(path);
+        assertThat(request.header("Authorization")).containsExactly("Bearer " + jwt);
     }
 
     @ParameterizedTest
