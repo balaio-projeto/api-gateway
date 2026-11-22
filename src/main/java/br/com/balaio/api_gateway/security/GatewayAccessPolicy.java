@@ -10,12 +10,13 @@ final class GatewayAccessPolicy {
             "/api/v1/auth/entrar", "/api/v1/auth/recuperacao", "/api/v1/auth/redefinicao", "/api/v1/auth/logout");
 
     enum Access {
-        PUBLIC, AUTHENTICATED, ARTESAO, ARTESAO_OR_ADMIN, ADMIN;
+        PUBLIC, AUTHENTICATED, ARTESAO, ORGANIZADOR, ARTESAO_OR_ADMIN, ADMIN;
 
         boolean accepts(String role) {
             return switch (this) {
                 case PUBLIC, AUTHENTICATED -> true;
                 case ARTESAO -> "artesao".equals(role);
+                case ORGANIZADOR -> "organizador".equals(role);
                 case ARTESAO_OR_ADMIN -> "artesao".equals(role) || "admin".equals(role);
                 case ADMIN -> "admin".equals(role);
             };
@@ -34,6 +35,10 @@ final class GatewayAccessPolicy {
         }
         if (path.equals("/api/v1/admin/mediacoes") && "POST".equals(method)) {
             return Access.AUTHENTICATED;
+        }
+        // Submissão de evento (PI-210): somente organizador. Admin decide, não submete; a checagem repete no events-service.
+        if ("POST".equals(method) && path.equals("/api/v1/eventos")) {
+            return Access.ORGANIZADOR;
         }
         if (path.equals("/api/v1/admin") || path.startsWith("/api/v1/admin/")) {
             return Access.ADMIN;
@@ -71,7 +76,7 @@ final class GatewayAccessPolicy {
                 || path.equals("/api/v1/fretes") || path.equals("/api/v1/estado"))) {
             return Access.PUBLIC;
         }
-        if (("POST".equals(method) && (path.equals("/api/v1/eventos") || path.equals("/api/v1/videos")
+        if (("POST".equals(method) && (path.equals("/api/v1/videos")
                 || path.matches("/api/v1/videos/[^/]+/(comentarios|visualizacoes)")
                 || path.equals("/api/v1/pagamentos/mercado-pago/notificacoes")))
                 || ("PUT".equals(method) && path.matches(

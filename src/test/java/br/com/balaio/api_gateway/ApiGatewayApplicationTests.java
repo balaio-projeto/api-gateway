@@ -311,7 +311,7 @@ class ApiGatewayApplicationTests {
     }
 
     @ParameterizedTest
-    @CsvSource({ "POST,/api/v1/eventos", "POST,/api/v1/videos", "POST,/api/v1/videos/video/comentarios",
+    @CsvSource({ "POST,/api/v1/videos", "POST,/api/v1/videos/video/comentarios",
             "POST,/api/v1/videos/video/visualizacoes",
             "PUT,/api/v1/estado/sacola", "PUT,/api/v1/estado/favoritos", "PUT,/api/v1/estado/historicoBusca",
             "PUT,/api/v1/estado/videosCurtidos", "PUT,/api/v1/estado/videosSalvos" })
@@ -665,11 +665,35 @@ class ApiGatewayApplicationTests {
     }
 
     @ParameterizedTest
-    @CsvSource({ "GET,/api/v1/admin/curadoria", "GET,/api/v1/admin/curadoria/123", "GET,/api/v1/admin/mediacoes", "PATCH,/api/v1/admin/mediacoes/123" })
+    @CsvSource({ "GET,/api/v1/admin/curadoria", "GET,/api/v1/admin/curadoria/123", "GET,/api/v1/admin/mediacoes", "PATCH,/api/v1/admin/mediacoes/123",
+            "PATCH,/api/v1/admin/contas/123/papel" })
     void administracaoExigeAdmin(String method, String path) throws Exception {
         assertError(send(method, path, "{}", "Authorization", "Bearer " + token("comprador")), 403, "SEM_PERMISSAO");
         assertThat(send(method, path, "{}", "Authorization", "Bearer " + token("admin")).statusCode()).isEqualTo(200);
         received();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "comprador", "artesao", "admin" })
+    void criacaoDeEventoExigePapelOrganizador(String role) throws Exception {
+        assertError(send("POST", "/api/v1/eventos", "{}", "Authorization", "Bearer " + token(role)), 403, "SEM_PERMISSAO");
+    }
+
+    @Test
+    void criacaoDeEventoSemCredenciaisOuComTokenInvalidoNaoEhEncaminhada() throws Exception {
+        assertError(send("POST", "/api/v1/eventos", "{}"), 401, "NAO_AUTENTICADO");
+        assertError(send("POST", "/api/v1/eventos", "{}", "Authorization", "Bearer token.invalido.aqui"), 401, "NAO_AUTENTICADO");
+    }
+
+    @Test
+    void organizadorCriaEventoComUnicoBearerEncaminhadoAoEventsService() throws Exception {
+        String jwt = token("organizador");
+
+        assertThat(send("POST", "/api/v1/eventos", "{}", "Authorization", "Bearer " + jwt).statusCode()).isEqualTo(200);
+
+        var request = received();
+        assertThat(request.service()).isEqualTo("events");
+        assertThat(request.header("Authorization")).containsExactly("Bearer " + jwt);
     }
 
     @Test
