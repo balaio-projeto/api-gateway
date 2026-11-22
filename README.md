@@ -22,6 +22,10 @@ As rotas de recomendações por IA e indicadores administrativos ficam para uma 
 
 `GET` e `PUT /api/v1/estado/sacola` e `POST /api/v1/sacola/revalidar` são encaminhados ao commerce com `Authorization` e o corpo preservados. A revalidação consulta preço e disponibilidade atuais da sacola autenticada sem reservar peças. `GET /api/v1/estado` agregado permanece no adaptador do frontend/Fake API; o Gateway não o envia ao commerce.
 
+`GET /api/v1/artesao/pedidos-pendentes` e `PATCH /api/v1/pedidos/{id}/estado` são encaminhados ao commerce com o JWT; o PATCH preserva `{ "estado": "producao" }` e o envelope `{dados,erro}`. O commerce verifica papel e titularidade.
+
+O acompanhamento `GET /api/v1/pedidos` e `GET /api/v1/pedidos/{id}` segue para commerce; `GET/POST /api/v1/pedidos/{id}/conversa` segue para community, preservando Authorization e corpo. O contrato interno de participantes do commerce não é encaminhado pelo Gateway.
+
 ## Execução local
 
 Java 25, Maven Wrapper, Spring Boot 4.1.1 e Spring Cloud Gateway Server WebMVC. Porta padrão: 8080.
@@ -70,7 +74,7 @@ O decoder usa chave local fixa e aceita somente **RS256**. Verifica assinatura e
 - Depois da validação, encaminha **um** `Authorization: Bearer <JWT>` e remove o cookie de autenticação. Preserva outros cookies, incluindo `balaio_cliente`, e respostas `Set-Cookie` dos serviços.
 - Remove headers de identidade controlados pelo cliente, incluindo famílias `X-User-*`, `X-Account-*`, `X-Role*`, `X-Auth*`, `X-Papel`, `X-Identity*` e equivalentes. `Forwarded`/`X-Forwarded-*` recebidos também são removidos; não substituem identidade nem origem confiável. A fonte de autenticação é o JWT validado.
 
-Os POSTs exatos de `/auth/cadastro`, `/auth/login`, `/auth/entrar`, `/auth/recuperacao` e `/auth/logout` são anônimos. Neles, credenciais anteriores são ignoradas e removidas antes do encaminhamento, inclusive tokens inválidos/expirados e cookies legados duplicados; isso permite recuperar o login e limpar a sessão. O controle Origin/cookie ocorre **antes** dessa remoção. Não há liberação genérica de `/auth/**`.
+Os POSTs exatos de `/auth/cadastro`, `/auth/login`, `/auth/entrar`, `/auth/recuperacao`, `/auth/redefinicao` e `/auth/logout` são anônimos. Neles, credenciais anteriores são ignoradas e removidas antes do encaminhamento, inclusive tokens inválidos/expirados e cookies legados duplicados; isso permite recuperar o login e limpar a sessão. O controle Origin/cookie ocorre **antes** dessa remoção. Não há liberação genérica de `/auth/**`. O PI-170 inclui somente o POST exato de redefinição, para permitir usar o token de recuperação sem uma sessão; `/auth/alterar-senha` continua autenticado.
 
 Nas demais rotas públicas, credenciais são opcionais, mas, quando fornecidas, precisam ser válidas. A borda não encaminha uma credencial inválida apenas porque a leitura seria pública.
 
@@ -91,9 +95,12 @@ As regras dependem de **método e caminho**, sem alterar os destinos do YAML:
 - Leituras documentadas de catálogo, perguntas da peça, artesãos, coletivos, referências, imagens, fretes, eventos, vídeos e comentários são públicas. HEAD acompanha GET. Não há wildcard de leitura que abra rotas privadas de painel/configuração.
 - Conta, endereços, pedidos, checkout, conversas e avaliações exigem autenticação. A propriedade do recurso deve ser verificada no serviço.
 - Painel `/artesao/*`, configurações do ateliê, criação/edição/exclusão de peças, respostas a perguntas e transições artesanais de pedido exigem artesão. PATCH de perfil de artesão admite artesão ou admin, conforme PI-171; isso não dispensa a verificação de posse.
-- Administração exige admin, **exceto POST exato `/admin/mediacoes`**, que exige autenticação e pertence ao fluxo de abertura de mediação do comprador. GET/PATCH da administração continuam restritos.
-- POST de eventos, vídeos e comentários, além dos PUTs de estado de visitante, permanecem públicos conforme o contrato atual. PI-169/PI-210 devem fechar a evolução dessas permissões; esta etapa não inventa um novo requisito de organizador.
+- Administração exige admin, **exceto POST exato `/admin/mediacoes`**, que exige autenticação e pertence ao fluxo de abertura de mediação do comprador. GET/PATCH da administração continuam restritos. `PATCH /admin/contas/{id}/papel` (provisionamento de organizador, PI-210) é administração comum.
+- **POST exato `/eventos` (PI-210) exige papel `organizador`**: anônimo → 401; comprador, artesão e admin → 403 `SEM_PERMISSAO`. O Bearer validado é encaminhado sem alteração e o `events-service` valida novamente assinatura, claims e papel. Admin decide sobre eventos; não os submete.
+- POST de vídeos e comentários, além dos PUTs de estado de visitante, permanecem públicos conforme o contrato atual (fora do escopo do PI-210).
+- Papel de um JWT já emitido vale até `exp` (até 3600 s). Após a promoção administrativa, o organizador precisa fazer novo login para obter token com o papel novo.
 - GET `/videos?painel=true` exige artesão porque inclui rascunhos no painel; a regra verifica todos os valores do parâmetro para evitar ambiguidade. Esta proteção é uma inferência explícita do uso pela UI, não uma transformação de toda leitura de vídeos em privada.
+- GET/HEAD `/artesaos/{slug}/pecas/painel` encaminha ao catálogo e exige artesão autenticado (PI-196). O catálogo verifica o slug e a posse pelo JWT. A rota `/artesaos/{slug}/pecas` continua pública e não expõe os estados privados de reserva/venda, mesmo com sessão.
 - Caminhos ambíguos na API, como percent-encoding no caminho, matrix parameters, barras duplicadas e traversal, são recusados com 400. Query params continuam preservados. Rotas novas não herdam acesso público automaticamente.
 
 `GET /estado` continua sem destino/composição. A listagem GET `/admin/mediacoes` é administrativa no contrato; o formulário de comprador que hoje a chama precisará de alinhamento no frontend, sem abrir uma listagem global pela borda.
@@ -107,3 +114,11 @@ Gateway validado não substitui revalidação e autorização nos serviços. A e
 Com JDK 25 no `JAVA_HOME`, execute `.\mvnw.cmd -B -ntp clean verify`. Os testes geram RSA em execução, gravam somente a pública temporária para o gateway e usam cinco upstreams HTTP locais controlados. Não dependem de Docker, banco ou serviços de negócio reais. A chave privada do emissor de teste fica em memória, sem fixture privada versionada.
 
 O teste cobre 45 exemplos de roteamento, JWT, Cookie/Bearer, falsificação de identidade, CORS/preflight, CSRF, política de papéis e configuração obrigatória. Isso comprova comportamento da borda e o encaminhamento HTTP; não comprova ownership ou revalidação nos serviços ainda pendentes.
+
+## Especificação das rotas
+
+`docs/openapi.yaml` documenta as rotas públicas do gateway. Não é gerada pelo gateway: foi montada a partir de `/v3/api-docs` de catalog, profile, commerce, community e events, mantendo só os caminhos que o `application.yaml` roteia.
+
+As regras de acesso por operação (público, autenticado, artesão, administrador) estão em `GatewayAccessPolicy`. A especificação não as repete em cada operação.
+
+Para atualizar, suba os serviços e baixe os `/v3/api-docs` de cada um. Se uma rota nova for adicionada ao `application.yaml`, ela precisa ser incluída na geração.

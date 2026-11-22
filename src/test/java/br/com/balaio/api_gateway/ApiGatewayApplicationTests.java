@@ -78,6 +78,95 @@ class ApiGatewayApplicationTests {
     }
 
     @Test
+    void encaminhaMultipartDaFotoSemAlterarConteudo() throws Exception {
+        String body = "--foto-boundary\r\nContent-Disposition: form-data; name=\"arquivo\"; filename=\"foto.png\"\r\n"
+                + "Content-Type: image/png\r\n\r\nconteudo-da-imagem\r\n--foto-boundary--\r\n";
+        var response = send("PUT", "/api/v1/artesao/me/imagem", body,
+                "Authorization", "Bearer " + token("artesao"),
+                "Content-Type", "multipart/form-data; boundary=foto-boundary");
+        assertThat(response.statusCode()).isEqualTo(200);
+        var request = received();
+        assertThat(request.service()).isEqualTo("profile");
+        assertThat(request.body()).isEqualTo(body);
+        var contentType = org.springframework.http.MediaType.parseMediaType(request.header("Content-Type").getFirst());
+        assertThat(contentType.getType()).isEqualTo("multipart");
+        assertThat(contentType.getSubtype()).isEqualTo("form-data");
+        assertThat(contentType.getParameter("boundary")).isEqualTo("foto-boundary");
+    }
+
+    @Test
+    void encaminhaGestaoDePedidosDoArtesaoComJwtECorpo() throws Exception {
+        String jwt = token("artesao");
+        var lista = send("GET", "/api/v1/artesao/pedidos-pendentes?artesao=forjado", null,
+                "Authorization", "Bearer " + jwt);
+        assertThat(lista.statusCode()).isEqualTo(200);
+        assertThat(lista.body()).contains("\"dados\"", "\"erro\":null");
+        var leitura = received();
+        assertThat(leitura.service()).isEqualTo("commerce");
+        assertThat(leitura.method()).isEqualTo("GET");
+        assertThat(leitura.rawPath()).isEqualTo("/api/v1/artesao/pedidos-pendentes");
+        assertThat(leitura.rawQuery()).isEqualTo("artesao=forjado");
+        assertThat(leitura.header("Authorization")).containsExactly("Bearer " + jwt);
+
+        String corpo = "{\"estado\":\"producao\"}";
+        var alteracao = send("PATCH", "/api/v1/pedidos/123/estado", corpo,
+                "Authorization", "Bearer " + jwt);
+        assertThat(alteracao.statusCode()).isEqualTo(200);
+        assertThat(alteracao.body()).contains("\"dados\"", "\"erro\":null");
+        var escrita = received();
+        assertThat(escrita.service()).isEqualTo("commerce");
+        assertThat(escrita.method()).isEqualTo("PATCH");
+        assertThat(escrita.rawPath()).isEqualTo("/api/v1/pedidos/123/estado");
+        assertThat(escrita.header("Authorization")).containsExactly("Bearer " + jwt);
+        assertThat(escrita.body()).isEqualTo(corpo);
+        assertError(send("GET", "/api/v1/artesao/pedidos-pendentes", null), 401, "NAO_AUTENTICADO");
+        assertError(send("PATCH", "/api/v1/pedidos/123/estado", corpo), 401, "NAO_AUTENTICADO");
+    }
+
+    @Test
+    void encaminhaAcompanhamentoEConversaSemPublicarParticipantesInternos() throws Exception {
+        String jwt = token("comprador");
+        for (String caminho : List.of("/api/v1/pedidos", "/api/v1/pedidos/123")) {
+            var resposta = send("GET", caminho, null, "Authorization", "Bearer " + jwt);
+            assertThat(resposta.statusCode()).isEqualTo(200);
+            var recebido = received();
+            assertThat(recebido.service()).isEqualTo("commerce");
+            assertThat(recebido.rawPath()).isEqualTo(caminho);
+            assertThat(recebido.header("Authorization")).containsExactly("Bearer " + jwt);
+        }
+        var leitura = send("GET", "/api/v1/pedidos/123/conversa", null,
+                "Authorization", "Bearer " + jwt);
+        assertThat(leitura.statusCode()).isEqualTo(200);
+        assertThat(leitura.body()).contains("\"dados\"", "\"erro\":null");
+        var recebida = received();
+        assertThat(recebida.service()).isEqualTo("community");
+        assertThat(recebida.method()).isEqualTo("GET");
+        assertThat(recebida.header("Authorization")).containsExactly("Bearer " + jwt);
+        String corpo = "{\"texto\":\"Olá\"}";
+        var envio = send("POST", "/api/v1/pedidos/123/conversa", corpo,
+                "Authorization", "Bearer " + jwt, "Idempotency-Key", "envio-123");
+        assertThat(envio.statusCode()).isEqualTo(200);
+        var escrita = received();
+        assertThat(escrita.service()).isEqualTo("community");
+        assertThat(escrita.method()).isEqualTo("POST");
+        assertThat(escrita.body()).isEqualTo(corpo);
+        assertThat(escrita.header("Authorization")).containsExactly("Bearer " + jwt);
+        assertThat(escrita.header("Idempotency-Key")).containsExactly("envio-123");
+        assertThat(send("GET", "/internal/v1/pedidos/123/participantes", null,
+                "Authorization", "Bearer " + jwt).statusCode()).isEqualTo(404);
+    }
+
+    @Test
+    void fotoPublicaAceitaHeadMasEscritaExigeAutenticacao() throws Exception {
+        String path = "/api/v1/arquivos/perfis/12345678-1234-1234-1234-123456789abc";
+        assertThat(send("HEAD", path, null).statusCode()).isEqualTo(200);
+        assertThat(received().service()).isEqualTo("profile");
+        assertError(send("PUT", path, "{}"), 401, "NAO_AUTENTICADO");
+        assertError(send("PUT", "/api/v1/artesao/me/imagem", "{}"), 401, "NAO_AUTENTICADO");
+        assertThat(RECEIVED).isEmpty();
+    }
+
+    @Test
     void encaminhaWebhookDoMercadoPagoSemJwtComAssinaturaEQuery() throws Exception {
         var response = send("POST", "/api/v1/pagamentos/mercado-pago/notificacoes?data.id=123", "{}",
                 "x-signature", "ts=123,v1=abc", "x-request-id", "request-teste");
@@ -158,6 +247,7 @@ class ApiGatewayApplicationTests {
                 route("catalog", "/api/v1/pecas/jarra/historico", "comprador"),
                 route("catalog", "/api/v1/pecas/jarra/relacionadas", "comprador"),
                 route("catalog", "/api/v1/artesaos/ana/pecas", "comprador"),
+                route("catalog", "/api/v1/artesaos/ana/pecas/painel", "artesao"),
                 route("catalog", "/api/v1/referencias", "comprador"),
                 route("catalog", "/api/v1/arquivos/pecas/jarra.jpg", "comprador"),
                 route("profile", "/api/v1/auth/contrato-futuro", "comprador"),
@@ -168,6 +258,8 @@ class ApiGatewayApplicationTests {
                 route("profile", "/api/v1/artesaos/ana", "comprador"),
                 route("profile", "/api/v1/artesaos/ana/configuracoes", "artesao"),
                 route("profile", "/api/v1/artesao/me", "artesao"),
+                route("profile", "/api/v1/artesao/me/imagem", "artesao"),
+                route("profile", "/api/v1/arquivos/perfis/12345678-1234-1234-1234-123456789abc", "comprador"),
                 route("profile", "/api/v1/artesao/selo", "artesao"),
                 route("profile", "/api/v1/coletivos", "comprador"),
                 route("profile", "/api/v1/coletivos/rio", "comprador"),
@@ -211,14 +303,15 @@ class ApiGatewayApplicationTests {
             "/api/v1/referencias", "/api/v1/arquivos/pecas/jarra.jpg", "/api/v1/fretes",
             "/api/v1/eventos", "/api/v1/eventos/feira", "/api/v1/videos", "/api/v1/videos/video",
             "/api/v1/videos/video/comentarios", "/api/v1/videos/video/arquivo", "/api/v1/videos/video/capa",
-            "/api/v1/artesaos/ana/reputacao" })
+            "/api/v1/artesaos/ana/reputacao",
+            "/api/v1/arquivos/perfis/12345678-1234-1234-1234-123456789abc" })
     void permiteGetPublicoSemCredenciais(String path) throws Exception {
         assertThat(send("GET", path, null).statusCode()).isEqualTo(200);
         assertThat(received().header("Authorization")).isEmpty();
     }
 
     @ParameterizedTest
-    @CsvSource({ "POST,/api/v1/eventos", "POST,/api/v1/videos", "POST,/api/v1/videos/video/comentarios",
+    @CsvSource({ "POST,/api/v1/videos", "POST,/api/v1/videos/video/comentarios",
             "POST,/api/v1/videos/video/visualizacoes",
             "PUT,/api/v1/estado/sacola", "PUT,/api/v1/estado/favoritos", "PUT,/api/v1/estado/historicoBusca",
             "PUT,/api/v1/estado/videosCurtidos", "PUT,/api/v1/estado/videosSalvos" })
@@ -409,7 +502,7 @@ class ApiGatewayApplicationTests {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = { "cadastro", "login", "entrar", "recuperacao", "logout" })
+    @ValueSource(strings = { "cadastro", "login", "entrar", "recuperacao", "redefinicao", "logout" })
     void authPublicoIgnoraCredenciaisAntigasEPassaRespostaDoProfile(String operation) throws Exception {
         var response = send("POST", "/api/v1/auth/" + operation, "{\"email\":\"pessoa@example.test\"}",
                 "Authorization", "Bearer expirado", "Cookie", "balaio_sessao=invalido; balaio_cliente=visitante:123", "Origin", ORIGIN);
@@ -419,6 +512,25 @@ class ApiGatewayApplicationTests {
         assertThat(request.service()).isEqualTo("profile");
         assertThat(request.header("Authorization")).isEmpty();
         assertThat(request.header("Cookie")).containsExactly("balaio_cliente=visitante:123");
+    }
+
+    @Test
+    void redefinicaoAnonimaPreservaCorpoEEncaminhaAoProfile() throws Exception {
+        String body = "{\"token\":\"token-sintetico\",\"novaSenha\":\"NovaSenhaSegura123!\"}";
+        assertThat(send("POST", "/api/v1/auth/redefinicao", body).statusCode()).isEqualTo(200);
+        var request = received();
+        assertThat(request.service()).isEqualTo("profile");
+        assertThat(request.body()).isEqualTo(body);
+        assertThat(request.header("Authorization")).isEmpty();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "GET /api/v1/auth/redefinicao", "PATCH /api/v1/auth/redefinicao",
+            "POST /api/v1/auth/alterar-senha", "POST /api/v1/auth/redefinicao/extra" })
+    void redefinicaoPublicaNaoLiberaOutrosMetodosOuRotas(String operation) throws Exception {
+        String[] parts = operation.split(" ", 2);
+        assertError(send(parts[0], parts[1], null), 401, "NAO_AUTENTICADO");
+        assertThat(RECEIVED).isEmpty();
     }
 
     @Test
@@ -444,7 +556,7 @@ class ApiGatewayApplicationTests {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = { "cadastro", "login", "entrar", "recuperacao", "logout" })
+    @ValueSource(strings = { "cadastro", "login", "entrar", "recuperacao", "redefinicao", "logout" })
     void authComCookieExigeOriginAntesDeRemoverCookie(String operation) throws Exception {
         assertError(send("POST", "/api/v1/auth/" + operation, "{}", "Cookie", "balaio_sessao=invalido"), 403, "SEM_PERMISSAO");
     }
@@ -516,13 +628,33 @@ class ApiGatewayApplicationTests {
     }
 
     @ParameterizedTest
-    @CsvSource({ "GET,/api/v1/artesao/me", "GET,/api/v1/artesaos/ana/configuracoes", "POST,/api/v1/pecas",
+    @CsvSource({ "GET,/api/v1/artesao/me", "GET,/api/v1/artesaos/ana/configuracoes",
+            "GET,/api/v1/artesaos/ana/pecas/painel", "PUT,/api/v1/artesao/me/imagem",
+            "DELETE,/api/v1/artesao/me/imagem", "POST,/api/v1/pecas",
             "PATCH,/api/v1/pecas/jarra", "DELETE,/api/v1/pecas/jarra", "PATCH,/api/v1/pecas/jarra/perguntas/123",
             "PATCH,/api/v1/pedidos/123/estado", "PATCH,/api/v1/pedidos/123/recusar" })
     void operacoesDoAtelieExigemArtesao(String method, String path) throws Exception {
         assertError(send(method, path, "{}", "Authorization", "Bearer " + token("comprador")), 403, "SEM_PERMISSAO");
         assertThat(send(method, path, "{}", "Authorization", "Bearer " + token("artesao")).statusCode()).isEqualTo(200);
         received();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "GET", "HEAD" })
+    void painelDePecasExigeArtesaoEEncaminhaSessaoAoCatalogo(String method) throws Exception {
+        String path = "/api/v1/artesaos/ana/pecas/painel";
+        assertThat(send(method, path, null).statusCode()).isEqualTo(401);
+        for (String role : List.of("comprador", "admin")) {
+            assertThat(send(method, path, null, "Authorization", "Bearer " + token(role)).statusCode())
+                    .isEqualTo(403);
+        }
+        assertThat(RECEIVED).isEmpty();
+        String jwt = token("artesao");
+        assertThat(send(method, path, null, "Cookie", "balaio_sessao=" + jwt).statusCode()).isEqualTo(200);
+        var request = received();
+        assertThat(request.service()).isEqualTo("catalog");
+        assertThat(request.rawPath()).isEqualTo(path);
+        assertThat(request.header("Authorization")).containsExactly("Bearer " + jwt);
     }
 
     @ParameterizedTest
@@ -533,11 +665,35 @@ class ApiGatewayApplicationTests {
     }
 
     @ParameterizedTest
-    @CsvSource({ "GET,/api/v1/admin/curadoria", "GET,/api/v1/admin/curadoria/123", "GET,/api/v1/admin/mediacoes", "PATCH,/api/v1/admin/mediacoes/123" })
+    @CsvSource({ "GET,/api/v1/admin/curadoria", "GET,/api/v1/admin/curadoria/123", "GET,/api/v1/admin/mediacoes", "PATCH,/api/v1/admin/mediacoes/123",
+            "PATCH,/api/v1/admin/contas/123/papel" })
     void administracaoExigeAdmin(String method, String path) throws Exception {
         assertError(send(method, path, "{}", "Authorization", "Bearer " + token("comprador")), 403, "SEM_PERMISSAO");
         assertThat(send(method, path, "{}", "Authorization", "Bearer " + token("admin")).statusCode()).isEqualTo(200);
         received();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "comprador", "artesao", "admin" })
+    void criacaoDeEventoExigePapelOrganizador(String role) throws Exception {
+        assertError(send("POST", "/api/v1/eventos", "{}", "Authorization", "Bearer " + token(role)), 403, "SEM_PERMISSAO");
+    }
+
+    @Test
+    void criacaoDeEventoSemCredenciaisOuComTokenInvalidoNaoEhEncaminhada() throws Exception {
+        assertError(send("POST", "/api/v1/eventos", "{}"), 401, "NAO_AUTENTICADO");
+        assertError(send("POST", "/api/v1/eventos", "{}", "Authorization", "Bearer token.invalido.aqui"), 401, "NAO_AUTENTICADO");
+    }
+
+    @Test
+    void organizadorCriaEventoComUnicoBearerEncaminhadoAoEventsService() throws Exception {
+        String jwt = token("organizador");
+
+        assertThat(send("POST", "/api/v1/eventos", "{}", "Authorization", "Bearer " + jwt).statusCode()).isEqualTo(200);
+
+        var request = received();
+        assertThat(request.service()).isEqualTo("events");
+        assertThat(request.header("Authorization")).containsExactly("Bearer " + jwt);
     }
 
     @Test
