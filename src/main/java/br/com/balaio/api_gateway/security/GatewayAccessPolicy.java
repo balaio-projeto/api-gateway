@@ -38,8 +38,11 @@ final class GatewayAccessPolicy {
         if (path.equals("/api/v1/admin") || path.startsWith("/api/v1/admin/")) {
             return Access.ADMIN;
         }
+        if ("POST".equals(method) && path.equals("/api/v1/coletivos")) {
+            return Access.ADMIN;
+        }
         if (path.equals("/api/v1/artesao") || path.startsWith("/api/v1/artesao/")
-                || path.matches("/api/v1/artesaos/[^/]+/configuracoes")) {
+                || path.matches("/api/v1/artesaos/[^/]+/(?:configuracoes|pecas/painel)")) {
             return Access.ARTESAO;
         }
         if ("PATCH".equals(method) && path.matches("/api/v1/artesaos/[^/]+")) {

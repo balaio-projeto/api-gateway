@@ -1,0 +1,3230 @@
+openapi: 3.1.0
+info:
+  title: Balaio api-gateway
+  version: v1
+  description: >-
+    Rotas públicas do gateway. Gerado a partir das especificações dos serviços (catalog, profile, commerce, community e
+    events), filtrado pelas rotas de application.yaml. As regras de acesso (público, autenticado, artesão,
+    administrador) estão em GatewayAccessPolicy e não estão refletidas por operação nesta especificação.
+servers:
+  - url: http://localhost:8080
+    description: Desenvolvimento local
+paths:
+  /api/v1/pecas:
+    get:
+      tags:
+        - Catálogo
+      summary: Listar peças publicadas
+      operationId: listar
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: tecnica
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: territorio
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: categoria
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: tipo
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: disponibilidade
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: desconto
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: ordenar
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: pagina
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+        - name: tamanho
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PecasListResponse'
+    post:
+      tags:
+        - Catálogo
+      operationId: criar_1
+      parameters:
+        - name: Authorization
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DadosPeca'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PecaItemResponse'
+  /api/v1/pecas/{slug}:
+    get:
+      tags:
+        - Catálogo
+      operationId: obter
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PecaItemResponse'
+    delete:
+      tags:
+        - Catálogo
+      operationId: inativar
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+    patch:
+      tags:
+        - Catálogo
+      operationId: atualizar
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DadosPeca'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PecaItemResponse'
+  /api/v1/referencias:
+    get:
+      tags:
+        - referencias-controller
+      summary: Consultar referências curadas e persistidas no catálogo
+      operationId: consultar_1
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Resposta'
+  /api/v1/pecas/{slug}/relacionadas:
+    get:
+      tags:
+        - Catálogo
+      summary: Listar peças públicas da mesma técnica, excluindo a peça atual
+      operationId: relacionadas
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: limite
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PecasRelacionadasResponse'
+  /api/v1/pecas/{slug}/historico:
+    get:
+      tags:
+        - Catálogo
+      summary: Consultar dados históricos da peça, inclusive após inativação
+      operationId: historico
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PecaItemResponse'
+  /api/v1/artesaos/{slug}/pecas:
+    get:
+      tags:
+        - artesao-pecas-controller
+      operationId: listarPublicas
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PecasListResponse'
+  /api/v1/arquivos/pecas/{nome}:
+    get:
+      tags:
+        - arquivos-peca-controller
+      operationId: obter_1
+      parameters:
+        - name: nome
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: byte
+  /api/v1/artesao/me/imagem:
+    put:
+      tags:
+        - perfil-artesao-controller
+      operationId: enviarImagem
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                arquivo:
+                  type: string
+                  format: binary
+              required:
+                - arquivo
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CadastroPublicoRespostaPerfilArtesaoResponse'
+    delete:
+      tags:
+        - perfil-artesao-controller
+      operationId: removerImagem
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CadastroPublicoRespostaPerfilArtesaoResponse'
+  /api/v1/usuario/enderecos:
+    get:
+      tags:
+        - enderecos-comprador-controller
+      operationId: listar
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CadastroPublicoRespostaListEndereco'
+    post:
+      tags:
+        - enderecos-comprador-controller
+      operationId: criar
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CadastroPublicoRespostaEndereco'
+  /api/v1/coletivos:
+    get:
+      tags:
+        - coletivos-controller
+      operationId: listar_1
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CadastroPublicoRespostaListColetivo'
+    post:
+      tags:
+        - coletivos-controller
+      operationId: criar_1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NovoColetivo'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CadastroPublicoRespostaColetivo'
+  /api/v1/auth/redefinicao:
+    post:
+      tags:
+        - recovery-controller
+      operationId: reset
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Reset'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiResponseResetReceipt'
+  /api/v1/auth/recuperacao:
+    post:
+      tags:
+        - recovery-controller
+      operationId: request
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Request'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiResponseReceipt'
+  /api/v1/auth/logout:
+    post:
+      tags:
+        - autenticacao-controller
+      operationId: sair
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CadastroPublicoRespostaSessaoEncerrada'
+  /api/v1/auth/login:
+    post:
+      tags:
+        - autenticacao-controller
+      operationId: entrar
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequisicao'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CadastroPublicoRespostaUsuarioPublicoResposta'
+  /api/v1/auth/entrar:
+    post:
+      tags:
+        - autenticacao-controller
+      operationId: entrar_1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequisicao'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CadastroPublicoRespostaUsuarioPublicoResposta'
+  /api/v1/auth/cadastro:
+    post:
+      tags:
+        - cadastro-publico-controller
+      operationId: cadastrar
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CadastroPublicoRequisicao'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CadastroPublicoRespostaUsuarioPublicoResposta'
+  /api/v1/auth/alterar-senha:
+    post:
+      tags:
+        - autenticacao-controller
+      operationId: alterarSenha
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlterarSenhaRequisicao'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CadastroPublicoRespostaSenhaAlteradaResposta'
+  /api/v1/artesao/selo:
+    get:
+      tags:
+        - curadoria-controller
+      operationId: consultar
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CadastroPublicoRespostaEstado'
+    post:
+      tags:
+        - curadoria-controller
+      operationId: solicitar
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CadastroPublicoRespostaEstado'
+  /api/v1/artesao/me:
+    get:
+      tags:
+        - perfil-artesao-controller
+      operationId: meu
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CadastroPublicoRespostaPerfilArtesaoResponse'
+    post:
+      tags:
+        - perfil-artesao-controller
+      operationId: criar_2
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PerfilArtesaoRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CadastroPublicoRespostaPerfilArtesaoResponse'
+    patch:
+      tags:
+        - perfil-artesao-controller
+      operationId: atualizarMeu
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CadastroPublicoRespostaPerfilArtesaoResponse'
+  /api/v1/admin/curadoria/{id}/decisao:
+    post:
+      tags:
+        - curadoria-controller
+      operationId: decidir
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CadastroPublicoRespostaSolicitacao'
+  /api/v1/usuario/enderecos/{id}:
+    get:
+      tags:
+        - enderecos-comprador-controller
+      operationId: consultar_1
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CadastroPublicoRespostaEndereco'
+    delete:
+      tags:
+        - enderecos-comprador-controller
+      operationId: excluir
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CadastroPublicoRespostaEndereco'
+    patch:
+      tags:
+        - enderecos-comprador-controller
+      operationId: atualizar
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CadastroPublicoRespostaEndereco'
+  /api/v1/usuario:
+    get:
+      tags:
+        - usuario-atual-controller
+      operationId: consultar_2
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CadastroPublicoRespostaUsuarioPublicoResposta'
+    patch:
+      tags:
+        - preferencias-controller
+      operationId: atualizarConta
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CadastroPublicoRespostaUsuarioPublicoResposta'
+  /api/v1/conta/{id}:
+    patch:
+      tags:
+        - preferencias-controller
+      operationId: atualizarConta_1
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CadastroPublicoRespostaUsuarioPublicoResposta'
+  /api/v1/artesaos/{slug}:
+    get:
+      tags:
+        - perfil-artesao-controller
+      operationId: publico
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CadastroPublicoRespostaPerfilArtesaoResponse'
+    patch:
+      tags:
+        - perfil-artesao-controller
+      operationId: atualizar_1
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CadastroPublicoRespostaPerfilArtesaoResponse'
+  /api/v1/artesaos/{slug}/configuracoes:
+    get:
+      tags:
+        - preferencias-controller
+      operationId: consultar_3
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CadastroPublicoRespostaConfiguracoes'
+    patch:
+      tags:
+        - preferencias-controller
+      operationId: atualizar_2
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CadastroPublicoRespostaConfiguracoes'
+  /api/v1/arquivos/perfis/{midiaId}:
+    get:
+      tags:
+        - midia-perfil-controller
+      operationId: recuperar
+      parameters:
+        - name: midiaId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: byte
+    head:
+      tags:
+        - midia-perfil-controller
+      operationId: consultar_4
+      parameters:
+        - name: midiaId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+  /api/v1/coletivos/{slug}:
+    get:
+      tags:
+        - coletivos-controller
+      operationId: consultar_5
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CadastroPublicoRespostaColetivo'
+  /api/v1/artesaos:
+    get:
+      tags:
+        - perfil-artesao-controller
+      operationId: listar_2
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CadastroPublicoRespostaListPerfilArtesaoResponse'
+  /api/v1/admin/curadoria:
+    get:
+      tags:
+        - curadoria-controller
+      operationId: fila
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CadastroPublicoRespostaListSolicitacao'
+  /api/v1/estado/sacola:
+    get:
+      tags:
+        - sacola-controller
+      operationId: consultar
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Envelope'
+    put:
+      tags:
+        - sacola-controller
+      operationId: substituir
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonNode'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Envelope'
+  /api/v1/sacola/revalidar:
+    post:
+      tags:
+        - sacola-controller
+      operationId: revalidar
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Envelope'
+  /api/v1/pagamentos/mercado-pago/notificacoes:
+    post:
+      tags:
+        - payment-webhook-controller
+      operationId: receber
+      parameters:
+        - name: x-signature
+          in: header
+          required: false
+          schema:
+            type: string
+        - name: x-request-id
+          in: header
+          required: false
+          schema:
+            type: string
+        - name: data.id
+          in: query
+          required: false
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonNode'
+        required: true
+      responses:
+        '200':
+          description: OK
+  /api/v1/checkout:
+    post:
+      tags:
+        - pedidos-controller
+      operationId: checkout
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Checkout'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Envelope'
+  /api/v1/pedidos/{id}/recusar:
+    patch:
+      tags:
+        - pedidos-controller
+      operationId: recusar
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Motivo'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Envelope'
+  /api/v1/pedidos/{id}/estado:
+    patch:
+      tags:
+        - pedidos-controller
+      operationId: estado
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Estado'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Envelope'
+  /api/v1/pedidos/{id}/cancelar:
+    patch:
+      tags:
+        - pedidos-controller
+      operationId: cancelar
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Envelope'
+  /api/v1/pedidos:
+    get:
+      tags:
+        - pedidos-controller
+      operationId: listar
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Envelope'
+  /api/v1/pedidos/{id}:
+    get:
+      tags:
+        - pedidos-controller
+      operationId: consultar_1
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Envelope'
+  /api/v1/fretes:
+    get:
+      tags:
+        - pedidos-controller
+      operationId: fretes
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Envelope'
+  /api/v1/artesao/vendas:
+    get:
+      tags:
+        - pedidos-controller
+      operationId: vendasArtesao
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Envelope'
+  /api/v1/artesao/pedidos-pendentes:
+    get:
+      tags:
+        - pedidos-controller
+      operationId: pendentesArtesao
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Envelope'
+  /api/v1/videos/{id}/capa:
+    get:
+      tags:
+        - Vídeos
+      summary: Imagem de capa do vídeo
+      operationId: capa
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Range
+          in: header
+          required: false
+          schema:
+            type: string
+        - name: usuario
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/UsuarioAutenticado'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/StreamingResponseBody'
+    put:
+      tags:
+        - Vídeos
+      summary: Envia a capa no corpo (image/jpeg, image/png ou image/webp, até 5 MB)
+      operationId: enviarCapa
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: usuario
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/UsuarioAutenticado'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiResponseVideoResponse'
+  /api/v1/videos/{id}/arquivo:
+    get:
+      tags:
+        - Vídeos
+      summary: Reproduz o vídeo (aceita Range)
+      operationId: arquivo
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Range
+          in: header
+          required: false
+          schema:
+            type: string
+        - name: usuario
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/UsuarioAutenticado'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/StreamingResponseBody'
+    put:
+      tags:
+        - Vídeos
+      summary: Envia o arquivo do vídeo no corpo (video/mp4 ou video/webm, até 100 MB)
+      operationId: enviarArquivo
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: duracao
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: usuario
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/UsuarioAutenticado'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiResponseVideoResponse'
+  /api/v1/estado/{colecao}:
+    get:
+      tags:
+        - Coleções do usuário
+      summary: Lê a coleção do usuário autenticado
+      operationId: consultar
+      parameters:
+        - name: colecao
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: usuario
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/UsuarioAutenticado'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiResponseListString'
+      security:
+        - bearer-jwt: []
+    put:
+      tags:
+        - Coleções do usuário
+      summary: Substitui a coleção; itens repetidos são removidos mantendo a ordem
+      operationId: substituir
+      parameters:
+        - name: colecao
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: usuario
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/UsuarioAutenticado'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: {}
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiResponseListString'
+      security:
+        - bearer-jwt: []
+    patch:
+      tags:
+        - Coleções do usuário
+      summary: Adiciona e/ou remove itens sem reenviar a lista; seguro entre abas e dispositivos
+      operationId: alterar
+      parameters:
+        - name: colecao
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: usuario
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/UsuarioAutenticado'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlteracaoColecaoRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiResponseListString'
+      security:
+        - bearer-jwt: []
+  /api/v1/videos:
+    get:
+      tags:
+        - Vídeos
+      summary: Vídeos publicados; com painel=true, todos os vídeos do artesão autenticado (paginado)
+      operationId: listar
+      parameters:
+        - name: painel
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: pagina
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+            default: 0
+        - name: tamanho
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+            default: 50
+        - name: usuario
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/UsuarioAutenticado'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiResponseListVideoResponse'
+    post:
+      tags:
+        - Vídeos
+      summary: Artesão cria o vídeo como rascunho; publicar exige arquivo enviado
+      operationId: criar
+      parameters:
+        - name: usuario
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/UsuarioAutenticado'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DadosVideo'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiResponseVideoResponse'
+  /api/v1/videos/{id}/visualizacoes:
+    post:
+      tags:
+        - Vídeos
+      summary: Registra uma reprodução iniciada; o player deve chamar uma vez por sessão de exibição
+      operationId: registrarVisualizacao
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: usuario
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/UsuarioAutenticado'
+      responses:
+        '200':
+          description: OK
+  /api/v1/videos/{id}/comentarios:
+    get:
+      tags:
+        - Vídeos
+      summary: Comentários do vídeo visível
+      operationId: comentarios
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: usuario
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/UsuarioAutenticado'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiResponseListComentarioResponse'
+    post:
+      tags:
+        - Vídeos
+      summary: Usuário autenticado comenta o vídeo
+      operationId: comentar
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: usuario
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/UsuarioAutenticado'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NovoComentarioRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiResponseComentarioResponse'
+  /api/v1/pedidos/{pedidoId}/conversa:
+    get:
+      tags:
+        - Conversas
+      summary: >-
+        Lê a conversa do pedido; só comprador e artesão do pedido. Ainda marca como lida por compatibilidade — prefira
+        POST /leitura
+      operationId: ler
+      parameters:
+        - name: pedidoId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: usuario
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/UsuarioAutenticado'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiResponseListMensagemResponse'
+      security:
+        - bearer-jwt: []
+    post:
+      tags:
+        - Conversas
+      summary: Envia mensagem na conversa do pedido
+      operationId: enviar
+      parameters:
+        - name: pedidoId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: usuario
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/UsuarioAutenticado'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NovaMensagemRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiResponseMensagemResponse'
+      security:
+        - bearer-jwt: []
+  /api/v1/pedidos/{pedidoId}/conversa/leitura:
+    post:
+      tags:
+        - Conversas
+      summary: Confirma que o usuário leu a conversa do pedido até agora
+      operationId: confirmarLeitura
+      parameters:
+        - name: pedidoId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: usuario
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/UsuarioAutenticado'
+      responses:
+        '200':
+          description: OK
+      security:
+        - bearer-jwt: []
+  /api/v1/pedidos/{pedidoId}/avaliacao:
+    get:
+      tags:
+        - Avaliações
+      summary: Comprador consulta a avaliação que fez do pedido
+      operationId: consultar_1
+      parameters:
+        - name: pedidoId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: usuario
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/UsuarioAutenticado'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiResponseAvaliacaoResponse'
+      security:
+        - bearer-jwt: []
+    post:
+      tags:
+        - Avaliações
+      summary: Comprador avalia um pedido entregue (uma vez por pedido)
+      operationId: avaliar
+      parameters:
+        - name: pedidoId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: usuario
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/UsuarioAutenticado'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NovaAvaliacao'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiResponseAvaliacaoResponse'
+      security:
+        - bearer-jwt: []
+  /api/v1/pecas/{slug}/perguntas:
+    get:
+      tags:
+        - Perguntas
+      summary: Lista as perguntas públicas de uma peça (paginado, mais antigas primeiro)
+      operationId: listar_1
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: pagina
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+            default: 0
+        - name: tamanho
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+            default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiResponseListPerguntaResponse'
+    post:
+      tags:
+        - Perguntas
+      summary: Usuário autenticado pergunta sobre a peça
+      operationId: perguntar
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: usuario
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/UsuarioAutenticado'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NovaPerguntaRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiResponsePerguntaResponse'
+      security:
+        - bearer-jwt: []
+  /api/v1/admin/mediacoes:
+    get:
+      tags:
+        - Mediações
+      summary: Comprador vê as próprias mediações; administrador vê todas (paginado)
+      operationId: listar_2
+      parameters:
+        - name: pagina
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+            default: 0
+        - name: tamanho
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+            default: 50
+        - name: usuario
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/UsuarioAutenticado'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiResponseListMediacaoResponse'
+      security:
+        - bearer-jwt: []
+    post:
+      tags:
+        - Mediações
+      summary: Comprador abre uma mediação para um pedido próprio
+      operationId: abrir
+      parameters:
+        - name: usuario
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/UsuarioAutenticado'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Abertura'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiResponseMediacaoResponse'
+      security:
+        - bearer-jwt: []
+  /api/v1/admin/mediacoes/{id}/reprocessar-entrega:
+    post:
+      tags:
+        - Mediações
+      summary: Administrador reenvia ao commerce uma decisão cuja entrega falhou (mesmo decisaoId)
+      operationId: reprocessarEntrega
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: usuario
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/UsuarioAutenticado'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiResponseMediacaoResponse'
+      security:
+        - bearer-jwt: []
+  /api/v1/admin/mediacoes/{id}/decisao:
+    post:
+      tags:
+        - Mediações
+      summary: Administrador decide a mediação; 202 enquanto o commerce não confirma
+      operationId: decidir
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: usuario
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/UsuarioAutenticado'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Decisao'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiResponseMediacaoResponse'
+      security:
+        - bearer-jwt: []
+  /api/v1/videos/{id}:
+    get:
+      tags:
+        - Vídeos
+      summary: Detalhe; rascunho só aparece para o dono
+      operationId: consultar_2
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: usuario
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/UsuarioAutenticado'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiResponseVideoResponse'
+    delete:
+      tags:
+        - Vídeos
+      summary: Dono remove o vídeo, seus arquivos e comentários
+      operationId: remover
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: usuario
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/UsuarioAutenticado'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiResponseVideoResponse'
+    patch:
+      tags:
+        - Vídeos
+      summary: Dono altera legenda, etiquetas, peça ou situação
+      operationId: alterar_1
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: usuario
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/UsuarioAutenticado'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DadosVideo'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiResponseVideoResponse'
+  /api/v1/pecas/{slug}/perguntas/{id}:
+    patch:
+      tags:
+        - Perguntas
+      summary: Artesão dono da peça responde a pergunta
+      operationId: responder
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: usuario
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/UsuarioAutenticado'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RespostaRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiResponsePerguntaResponse'
+      security:
+        - bearer-jwt: []
+  /api/v1/admin/mediacoes/{id}:
+    patch:
+      tags:
+        - Mediações
+      summary: Administrador coloca a mediação em análise
+      operationId: iniciarAnalise
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: usuario
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/UsuarioAutenticado'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlteracaoEstado'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiResponseMediacaoResponse'
+      security:
+        - bearer-jwt: []
+  /api/v1/artesaos/{artesaoSlug}/reputacao:
+    get:
+      tags:
+        - Avaliações
+      summary: Média e distribuição das notas recebidas pelo artesão
+      operationId: reputacao
+      parameters:
+        - name: artesaoSlug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiResponseReputacao'
+  /api/v1/artesao/conversas:
+    get:
+      tags:
+        - Conversas
+      summary: Conversas dos pedidos do artesão autenticado, com prévia e não lidas
+      operationId: doArtesao
+      parameters:
+        - name: usuario
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/UsuarioAutenticado'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiResponseListConversaArtesaoResponse'
+      security:
+        - bearer-jwt: []
+  /api/v1/eventos:
+    get:
+      tags:
+        - evento-controller
+      operationId: listarEventos
+      parameters:
+        - name: lat
+          in: query
+          required: false
+          schema:
+            type: number
+            format: double
+        - name: lng
+          in: query
+          required: false
+          schema:
+            type: number
+            format: double
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiResponseListEventoResponse'
+    post:
+      tags:
+        - evento-controller
+      operationId: criarEvento
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CriarEventoRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiResponseEventoResponse'
+  /api/v1/eventos/{slug}:
+    get:
+      tags:
+        - evento-controller
+      operationId: consultarPorSlug
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiResponseEventoResponse'
+components:
+  securitySchemes:
+    bearer-jwt:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Criar:
+      type: object
+      properties:
+        pedidoId:
+          type: string
+        slug:
+          type: string
+        chave:
+          type: string
+    Reserva:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        pedidoId:
+          type: string
+        slug:
+          type: string
+        estado:
+          type: string
+        expiraEm:
+          type: string
+          format: date-time
+        preco:
+          type: number
+        artesao:
+          type: string
+        proprietarioId:
+          type: string
+          format: uuid
+    Resposta:
+      type: object
+      properties:
+        dados:
+          $ref: '#/components/schemas/Reserva'
+        erro: {}
+    Liberar:
+      type: object
+      properties:
+        pedidoId:
+          type: string
+        chave:
+          type: string
+    Confirmar:
+      type: object
+      properties:
+        pedidoId:
+          type: string
+        chave:
+          type: string
+    DadosPeca:
+      type: object
+      properties:
+        nome:
+          type: string
+        tecnica:
+          type: string
+        territorio:
+          type: string
+        categoria:
+          type: string
+        tipo:
+          type: string
+        historia:
+          type: array
+          items:
+            type: string
+        materiais:
+          type: array
+          items:
+            type: string
+        preco:
+          type: number
+        disponibilidade:
+          type: string
+        prazoProducaoDias:
+          type: number
+        situacao:
+          type: string
+        fotos:
+          type: array
+          items:
+            $ref: '#/components/schemas/FotoRecebida'
+        inativadoEm:
+          type: string
+    FotoRecebida:
+      type: object
+      properties:
+        id:
+          type: string
+        nome:
+          type: string
+        url:
+          type: string
+    FotoPeca:
+      type: object
+      properties:
+        id:
+          type: string
+        nome:
+          type: string
+        url:
+          type: string
+        ordem:
+          type: integer
+          format: int32
+    PecaItemResponse:
+      type: object
+      properties:
+        dados:
+          $ref: '#/components/schemas/PecaResponse'
+        erro: {}
+    PecaResponse:
+      type: object
+      properties:
+        slug:
+          type: string
+        nome:
+          type: string
+        artesao:
+          type: string
+        territorio:
+          type: string
+        tecnica:
+          type: string
+        categoria:
+          type: string
+        tipo:
+          type: string
+        preco:
+          type: number
+        desconto:
+          type: number
+        disponibilidade:
+          type: string
+        prazoProducaoDias:
+          type: integer
+          format: int32
+        historia:
+          type: array
+          items:
+            type: string
+        imagem:
+          type: string
+        avaliacao:
+          type: number
+        totalAvaliacoes:
+          type: integer
+          format: int32
+        situacao:
+          type: string
+        fotos:
+          type: array
+          items:
+            $ref: '#/components/schemas/FotoPeca'
+        ordemFotos:
+          type: array
+          items:
+            type: string
+        criadaEm:
+          type: string
+        materiais:
+          type: array
+          items:
+            type: string
+        autentica:
+          type: boolean
+        inativadoEm:
+          type: string
+        vendidaEmPedido:
+          type: string
+        estadoVenda:
+          type: string
+    Cotacao:
+      type: object
+      properties:
+        slug:
+          type: string
+        preco:
+          type: number
+        disponibilidade:
+          type: string
+        artesao:
+          type: string
+        proprietarioId:
+          type: string
+          format: uuid
+    CotacaoResposta:
+      type: object
+      properties:
+        dados:
+          $ref: '#/components/schemas/Cotacao'
+        erro: {}
+    PaginacaoResponse:
+      type: object
+      properties:
+        pagina:
+          type: integer
+          format: int32
+        tamanho:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        totalPaginas:
+          type: integer
+          format: int32
+    PecasListResponse:
+      type: object
+      properties:
+        dados:
+          type: array
+          items:
+            $ref: '#/components/schemas/PecaResponse'
+        erro: {}
+        paginacao:
+          $ref: '#/components/schemas/PaginacaoResponse'
+    PecasRelacionadasResponse:
+      type: object
+      properties:
+        dados:
+          type: array
+          items:
+            $ref: '#/components/schemas/PecaResponse'
+        erro: {}
+    CadastroPublicoRespostaPerfilArtesaoResponse:
+      type: object
+      properties:
+        dados:
+          $ref: '#/components/schemas/PerfilArtesaoResponse'
+        erro:
+          $ref: '#/components/schemas/Erro'
+    Erro:
+      type: object
+      properties:
+        codigo:
+          type: string
+        mensagem:
+          type: string
+    PerfilArtesaoResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+        nome:
+          type: string
+        atelie:
+          type: string
+        historia:
+          type: string
+        territorio:
+          type: string
+        tecnica:
+          type: string
+        imagem:
+          type: string
+        obrasComercializadas:
+          type: integer
+          format: int64
+        avaliacaoMedia:
+          type: number
+          format: double
+        selo:
+          type: boolean
+    CadastroPublicoRespostaEndereco:
+      type: object
+      properties:
+        dados:
+          $ref: '#/components/schemas/Endereco'
+        erro:
+          $ref: '#/components/schemas/Erro'
+    Endereco:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        apelido:
+          type: string
+        rua:
+          type: string
+        bairro:
+          type: string
+        cep:
+          type: string
+        principal:
+          type: boolean
+    NovoColetivo:
+      type: object
+      properties:
+        slug:
+          type: string
+        nome:
+          type: string
+        territorio:
+          type: string
+        fundado:
+          type: string
+        historia:
+          type: string
+        imagem:
+          type: string
+        apoio:
+          type: array
+          items:
+            type: string
+        membros:
+          type: array
+          items:
+            type: string
+    CadastroPublicoRespostaColetivo:
+      type: object
+      properties:
+        dados:
+          $ref: '#/components/schemas/Coletivo'
+        erro:
+          $ref: '#/components/schemas/Erro'
+    Coletivo:
+      type: object
+      properties:
+        slug:
+          type: string
+        nome:
+          type: string
+        territorio:
+          type: string
+        fundado:
+          type: string
+        historia:
+          type: string
+        membros:
+          type: array
+          items:
+            type: string
+        tecnicas:
+          type: array
+          items:
+            type: string
+        apoio:
+          type: array
+          items:
+            type: string
+        imagem:
+          type: string
+        pecas:
+          type: array
+          items:
+            $ref: '#/components/schemas/JsonNode'
+    JsonNode:
+      type: object
+      properties:
+        empty:
+          type: boolean
+        array:
+          type: boolean
+        'null':
+          type: boolean
+        object:
+          type: boolean
+        float:
+          type: boolean
+        integralNumber:
+          type: boolean
+        string:
+          type: boolean
+        nodeType:
+          type: string
+          enum:
+            - ARRAY
+            - BINARY
+            - BOOLEAN
+            - MISSING
+            - 'NULL'
+            - NUMBER
+            - OBJECT
+            - POJO
+            - STRING
+        missingNode:
+          type: boolean
+        valueNode:
+          type: boolean
+        container:
+          type: boolean
+        pojo:
+          type: boolean
+        short:
+          type: boolean
+        int:
+          type: boolean
+        long:
+          type: boolean
+        double:
+          type: boolean
+        bigDecimal:
+          type: boolean
+        bigInteger:
+          type: boolean
+        textual:
+          type: boolean
+          deprecated: true
+        boolean:
+          type: boolean
+        binary:
+          type: boolean
+        floatingPointNumber:
+          type: boolean
+        number:
+          type: boolean
+        embeddedValue:
+          type: boolean
+    Reset:
+      type: object
+      properties:
+        token:
+          type: string
+        novaSenha:
+          type: string
+    ApiError:
+      type: object
+      properties:
+        codigo:
+          type: string
+        mensagem:
+          type: string
+    ApiResponseResetReceipt:
+      type: object
+      properties:
+        dados:
+          $ref: '#/components/schemas/ResetReceipt'
+        erro:
+          $ref: '#/components/schemas/ApiError'
+    ResetReceipt:
+      type: object
+      properties:
+        redefinida:
+          type: boolean
+    Request:
+      type: object
+      properties:
+        email:
+          type: string
+          minLength: 1
+      required:
+        - email
+    ApiResponseReceipt:
+      type: object
+      properties:
+        dados:
+          $ref: '#/components/schemas/Receipt'
+        erro:
+          $ref: '#/components/schemas/ApiError'
+    Receipt:
+      type: object
+      properties:
+        recebida:
+          type: boolean
+    CadastroPublicoRespostaSessaoEncerrada:
+      type: object
+      properties:
+        dados:
+          $ref: '#/components/schemas/SessaoEncerrada'
+        erro:
+          $ref: '#/components/schemas/Erro'
+    SessaoEncerrada:
+      type: object
+      properties:
+        encerrada:
+          type: boolean
+    LoginRequisicao:
+      type: object
+      properties:
+        email:
+          type: string
+        senha:
+          type: string
+    CadastroPublicoRespostaUsuarioPublicoResposta:
+      type: object
+      properties:
+        dados:
+          $ref: '#/components/schemas/UsuarioPublicoResposta'
+        erro:
+          $ref: '#/components/schemas/Erro'
+    UsuarioPublicoResposta:
+      type: object
+      properties:
+        id:
+          type: string
+        nome:
+          type: string
+        email:
+          type: string
+        papel:
+          type: string
+        perfil:
+          type: string
+        imagem:
+          type: string
+    CadastroPublicoRequisicao:
+      type: object
+      properties:
+        nome:
+          type: string
+        email:
+          type: string
+        senha:
+          type: string
+        perfil:
+          type: string
+        papel:
+          type: string
+    AlterarSenhaRequisicao:
+      type: object
+      properties:
+        senhaAtual:
+          type: string
+        novaSenha:
+          type: string
+    CadastroPublicoRespostaSenhaAlteradaResposta:
+      type: object
+      properties:
+        dados:
+          $ref: '#/components/schemas/SenhaAlteradaResposta'
+        erro:
+          $ref: '#/components/schemas/Erro'
+    SenhaAlteradaResposta:
+      type: object
+      properties:
+        alterada:
+          type: boolean
+    CadastroPublicoRespostaEstado:
+      type: object
+      properties:
+        dados:
+          $ref: '#/components/schemas/Estado'
+        erro:
+          $ref: '#/components/schemas/Erro'
+    Estado:
+      type: object
+      properties:
+        estado:
+          type: string
+    Solicitacao:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        artesaoSlug:
+          type: string
+        artesao:
+          type: string
+        atelie:
+          type: string
+        mensagem:
+          type: string
+        situacao:
+          type: string
+        solicitadoEm:
+          type: string
+          format: date-time
+        motivo:
+          type: string
+        decididoEm:
+          type: string
+          format: date-time
+        territorio:
+          type: string
+        tecnica:
+          type: string
+        imagem:
+          type: string
+        pecasPublicadas:
+          type: integer
+          format: int32
+    PerfilArtesaoRequest:
+      type: object
+      properties:
+        nome:
+          type: string
+          maxLength: 240
+          minLength: 0
+        atelie:
+          type: string
+          maxLength: 240
+          minLength: 0
+        historia:
+          type: string
+          maxLength: 2000
+          minLength: 0
+        territorio:
+          type: string
+          maxLength: 120
+          minLength: 0
+        tecnica:
+          type: string
+          maxLength: 120
+          minLength: 0
+        imagem:
+          type: string
+          maxLength: 1024
+          minLength: 0
+          pattern: ^(?!data:)[^\r\n]*$
+      required:
+        - atelie
+        - nome
+    CadastroPublicoRespostaSolicitacao:
+      type: object
+      properties:
+        dados:
+          $ref: '#/components/schemas/Solicitacao'
+        erro:
+          $ref: '#/components/schemas/Erro'
+    CadastroPublicoRespostaConfiguracoes:
+      type: object
+      properties:
+        dados:
+          $ref: '#/components/schemas/Configuracoes'
+        erro:
+          $ref: '#/components/schemas/Erro'
+    Configuracoes:
+      type: object
+      properties:
+        cepOrigem:
+          type: string
+        prazoPadraoDias:
+          type: integer
+          format: int32
+        aceitaEncomendas:
+          type: boolean
+        encomendasPausadas:
+          type: boolean
+        chavePix:
+          type: string
+    CadastroPublicoRespostaListEndereco:
+      type: object
+      properties:
+        dados:
+          type: array
+          items:
+            $ref: '#/components/schemas/Endereco'
+        erro:
+          $ref: '#/components/schemas/Erro'
+    CadastroPublicoRespostaListColetivo:
+      type: object
+      properties:
+        dados:
+          type: array
+          items:
+            $ref: '#/components/schemas/Coletivo'
+        erro:
+          $ref: '#/components/schemas/Erro'
+    CadastroPublicoRespostaListPerfilArtesaoResponse:
+      type: object
+      properties:
+        dados:
+          type: array
+          items:
+            $ref: '#/components/schemas/PerfilArtesaoResponse'
+        erro:
+          $ref: '#/components/schemas/Erro'
+    CadastroPublicoRespostaListSolicitacao:
+      type: object
+      properties:
+        dados:
+          type: array
+          items:
+            $ref: '#/components/schemas/Solicitacao'
+        erro:
+          $ref: '#/components/schemas/Erro'
+    Envelope:
+      type: object
+      properties:
+        dados: {}
+        erro: {}
+    Decisao:
+      type: object
+      properties:
+        decisao:
+          type: string
+    Checkout:
+      type: object
+      properties:
+        itens:
+          type: array
+          items:
+            $ref: '#/components/schemas/Item'
+        freteId:
+          type: string
+        meio:
+          type: string
+        endereco:
+          type: object
+          additionalProperties:
+            type: string
+        enderecoId:
+          type: string
+          format: uuid
+    Item:
+      type: object
+      properties:
+        slug:
+          type: string
+        quantidade:
+          type: integer
+          format: int32
+    Motivo:
+      type: object
+      properties:
+        motivo:
+          type: string
+    UsuarioAutenticado:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        papel:
+          type: string
+          enum:
+            - COMPRADOR
+            - ARTESAO
+            - ADMIN
+        token:
+          type: string
+    ApiResponseVideoResponse:
+      type: object
+      properties:
+        dados:
+          $ref: '#/components/schemas/VideoResponse'
+        erro:
+          $ref: '#/components/schemas/ApiError'
+    VideoResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        artesao:
+          type: string
+        peca:
+          type: string
+        legenda:
+          type: string
+        etiquetas:
+          type: array
+          items:
+            type: string
+        duracao:
+          type: string
+        visualizacoes:
+          type: integer
+          format: int64
+        curtidas:
+          type: integer
+          format: int64
+        comentarios:
+          type: integer
+          format: int64
+        publicadoEm:
+          type: string
+        capa:
+          type: string
+        url:
+          type: string
+        situacao:
+          type: string
+    ApiResponseListString:
+      type: object
+      properties:
+        dados:
+          type: array
+          items:
+            type: string
+        erro:
+          $ref: '#/components/schemas/ApiError'
+    DadosVideo:
+      type: object
+      properties:
+        legenda:
+          type: string
+        etiquetas:
+          type: array
+          items:
+            type: string
+        peca:
+          type: string
+        duracao:
+          type: string
+        situacao:
+          type: string
+    NovoComentarioRequest:
+      type: object
+      properties:
+        texto:
+          type: string
+    ApiResponseComentarioResponse:
+      type: object
+      properties:
+        dados:
+          $ref: '#/components/schemas/ComentarioResponse'
+        erro:
+          $ref: '#/components/schemas/ApiError'
+    ComentarioResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        videoId:
+          type: string
+          format: uuid
+        autor:
+          type: string
+        texto:
+          type: string
+        quando:
+          type: string
+        curtidas:
+          type: integer
+          format: int64
+        artesao:
+          type: boolean
+        criadoEm:
+          type: string
+          format: date-time
+    NovaMensagemRequest:
+      type: object
+      properties:
+        texto:
+          type: string
+    ApiResponseMensagemResponse:
+      type: object
+      properties:
+        dados:
+          $ref: '#/components/schemas/MensagemResponse'
+        erro:
+          $ref: '#/components/schemas/ApiError'
+    MensagemResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        pedidoId:
+          type: string
+          format: uuid
+        autor:
+          type: string
+        texto:
+          type: string
+        hora:
+          type: string
+        enviadaEm:
+          type: string
+          format: date-time
+    NovaAvaliacao:
+      type: object
+      properties:
+        nota:
+          type: integer
+          format: int32
+        comentario:
+          type: string
+        aspectos:
+          type: array
+          items:
+            type: string
+    ApiResponseAvaliacaoResponse:
+      type: object
+      properties:
+        dados:
+          $ref: '#/components/schemas/AvaliacaoResponse'
+        erro:
+          $ref: '#/components/schemas/ApiError'
+    AvaliacaoResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        pedidoId:
+          type: string
+          format: uuid
+        nota:
+          type: integer
+          format: int32
+        comentario:
+          type: string
+        aspectos:
+          type: array
+          items:
+            type: string
+        criadaEm:
+          type: string
+          format: date-time
+    NovaPerguntaRequest:
+      type: object
+      properties:
+        pergunta:
+          type: string
+    ApiResponsePerguntaResponse:
+      type: object
+      properties:
+        dados:
+          $ref: '#/components/schemas/PerguntaResponse'
+        erro:
+          $ref: '#/components/schemas/ApiError'
+    PerguntaResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        pecaSlug:
+          type: string
+        pergunta:
+          type: string
+        autor:
+          type: string
+        usuarioId:
+          type: string
+          format: uuid
+        criadaEm:
+          type: string
+          format: date-time
+        resposta:
+          type: string
+        respondidaEm:
+          type: string
+          format: date-time
+    Abertura:
+      type: object
+      properties:
+        pedido:
+          type: string
+          format: uuid
+        assunto:
+          type: string
+        relato:
+          type: string
+    ApiResponseMediacaoResponse:
+      type: object
+      properties:
+        dados:
+          $ref: '#/components/schemas/MediacaoResponse'
+        erro:
+          $ref: '#/components/schemas/ApiError'
+    MediacaoResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        pedido:
+          type: string
+          format: uuid
+        compradorId:
+          type: string
+          format: uuid
+        assunto:
+          type: string
+        relato:
+          type: string
+        estado:
+          type: string
+        emAnalise:
+          type: boolean
+        partes:
+          type: string
+        aberta:
+          type: string
+        decisao:
+          type: string
+        tentativas:
+          type: integer
+          format: int32
+        ultimoErro:
+          type: string
+    RespostaRequest:
+      type: object
+      properties:
+        resposta:
+          type: string
+    AlteracaoColecaoRequest:
+      type: object
+      properties:
+        adicionar:
+          type: array
+          items:
+            type: string
+        remover:
+          type: array
+          items:
+            type: string
+    AlteracaoEstado:
+      type: object
+      properties:
+        estado:
+          type: string
+    ApiResponseListVideoResponse:
+      type: object
+      properties:
+        dados:
+          type: array
+          items:
+            $ref: '#/components/schemas/VideoResponse'
+        erro:
+          $ref: '#/components/schemas/ApiError'
+    ApiResponseListComentarioResponse:
+      type: object
+      properties:
+        dados:
+          type: array
+          items:
+            $ref: '#/components/schemas/ComentarioResponse'
+        erro:
+          $ref: '#/components/schemas/ApiError'
+    StreamingResponseBody: {}
+    ApiResponseListMensagemResponse:
+      type: object
+      properties:
+        dados:
+          type: array
+          items:
+            $ref: '#/components/schemas/MensagemResponse'
+        erro:
+          $ref: '#/components/schemas/ApiError'
+    ApiResponseListPerguntaResponse:
+      type: object
+      properties:
+        dados:
+          type: array
+          items:
+            $ref: '#/components/schemas/PerguntaResponse'
+        erro:
+          $ref: '#/components/schemas/ApiError'
+    ApiResponseReputacao:
+      type: object
+      properties:
+        dados:
+          $ref: '#/components/schemas/Reputacao'
+        erro:
+          $ref: '#/components/schemas/ApiError'
+    Reputacao:
+      type: object
+      properties:
+        media:
+          type: number
+        total:
+          type: integer
+          format: int32
+        distribuicao:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+    ApiResponseListConversaArtesaoResponse:
+      type: object
+      properties:
+        dados:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConversaArtesaoResponse'
+        erro:
+          $ref: '#/components/schemas/ApiError'
+    ConversaArtesaoResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        pessoa:
+          type: string
+        assunto:
+          type: string
+        previa:
+          type: string
+        quando:
+          type: string
+        naoLida:
+          type: boolean
+        retrato:
+          type: string
+    ApiResponseListMediacaoResponse:
+      type: object
+      properties:
+        dados:
+          type: array
+          items:
+            $ref: '#/components/schemas/MediacaoResponse'
+        erro:
+          $ref: '#/components/schemas/ApiError'
+    CriarEventoRequest:
+      type: object
+      properties:
+        slug:
+          type: string
+          maxLength: 255
+          minLength: 0
+        nome:
+          type: string
+          maxLength: 255
+          minLength: 0
+        tipo:
+          type: string
+          maxLength: 130
+          minLength: 0
+        organizador:
+          type: string
+          maxLength: 255
+          minLength: 0
+        descricao:
+          type: string
+        dataInicio:
+          type: string
+          format: date
+        dataFim:
+          type: string
+          format: date
+        horarioInicio:
+          type: string
+          format: time-local
+        horarioFim:
+          type: string
+          format: time-local
+        entrada:
+          type: string
+          maxLength: 255
+          minLength: 0
+        cidade:
+          type: string
+          maxLength: 150
+          minLength: 0
+        local:
+          type: string
+          maxLength: 255
+          minLength: 0
+        endereco:
+          type: string
+          maxLength: 500
+          minLength: 0
+        latitude:
+          type: number
+          format: double
+          maximum: 90
+          minimum: -90
+        longitude:
+          type: number
+          format: double
+          maximum: 180
+          minimum: -180
+      required:
+        - cidade
+        - endereco
+        - latitude
+        - local
+        - longitude
+        - nome
+        - organizador
+        - slug
+        - tipo
+    ApiResponseEventoResponse:
+      type: object
+      properties:
+        dados:
+          $ref: '#/components/schemas/EventoResponse'
+        erro:
+          $ref: '#/components/schemas/ApiError'
+    EventoResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        slug:
+          type: string
+        nome:
+          type: string
+        tipo:
+          type: string
+        organizador:
+          type: string
+        descricao:
+          type: string
+        dataInicio:
+          type: string
+          format: date
+        dataFim:
+          type: string
+          format: date
+        horarioInicio:
+          type: string
+          format: time-local
+        horarioFim:
+          type: string
+          format: time-local
+        entrada:
+          type: string
+        cidade:
+          type: string
+        local:
+          type: string
+        endereco:
+          type: string
+        lat:
+          type: number
+          format: double
+        lng:
+          type: number
+          format: double
+    ApiResponseListEventoResponse:
+      type: object
+      properties:
+        dados:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventoResponse'
+        erro:
+          $ref: '#/components/schemas/ApiError'
