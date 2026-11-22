@@ -4,7 +4,7 @@ Entrada HTTP do frontend para os cinco microsserviços. O gateway preserva camin
 
 ## Destinos configurados
 
-| Serviço | URL local padrão | Caminhos da Fake API encaminhados |
+| Serviço | URL local padrão | Caminhos encaminhados |
 | --- | --- | --- |
 | catalog-service | http://localhost:8081 | Peças, histórico e relacionadas, peças do artesão, referências e arquivos de fotos |
 | profile-service | http://localhost:8082 | Auth, usuário, conta, artesãos, coletivos, selo, curadoria e histórico de busca |
@@ -14,14 +14,13 @@ Entrada HTTP do frontend para os cinco microsserviços. O gateway preserva camin
 
 Todas as rotas conservam o prefixo `/api/v1`. Os cinco destinos e 45 padrões de caminho foram preservados. O catálogo implementa `GET /api/v1/pecas`; o profile implementa cadastro/login/alias/logout. Os outros encaminhamentos preparam a borda: configurar uma rota não implementa o endpoint no serviço de destino.
 
-Os caminhos compartilhados são específicos para evitar conflito: `/pecas/{slug}/perguntas` vai para comunicação e as demais rotas de peça vão para catálogo; `/pedidos/{id}/conversa` e `/pedidos/{id}/avaliacao` vão para comunicação e as rotas transacionais de pedido vão para comércio. `GET /api/v1/estado` ainda precisa de um contrato de composição entre sacola, favoritos e histórico antes de ser encaminhado; as rotas `PUT /estado/...` já apontam para os respectivos donos.
+Os caminhos compartilhados são específicos para evitar conflito: `/pecas/{slug}/perguntas` vai para comunicação e as demais rotas de peça vão para catálogo; `/pedidos/{id}/conversa` e `/pedidos/{id}/avaliacao` vão para comunicação e as rotas transacionais de pedido vão para comércio. `GET /api/v1/estado` (agregado) não é roteado: o frontend não o chama. As rotas `/estado/{colecao}` e `/estado/sacola` apontam para os respectivos donos.
 
 O webhook do Checkout Pro usa apenas `POST /api/v1/pagamentos/mercado-pago/notificacoes`, encaminhado ao commerce com query `data.id` e cabeçalhos `x-signature`/`x-request-id` intactos. A URL pública configurada no Mercado Pago precisa ser HTTPS e alcançável pelo provedor; o commerce valida a assinatura antes de persistir a notificação. Nenhuma rota interna de serviço é exposta pelo gateway.
 
-As rotas de recomendações por IA e indicadores administrativos ficam para uma etapa posterior, conforme o escopo atual. Ao criar uma rota nova, adicione o caminho ao destino correto em `src/main/resources/application.yaml` e verifique o contrato em `Balaio-Front/Frontend/src/services/api` e `Balaio-Front/Frontend/fake-api/server.cjs`.
+As rotas de recomendações por IA e indicadores administrativos ficam para uma etapa posterior, conforme o escopo atual. Ao criar uma rota nova, adicione o caminho ao destino correto em `src/main/resources/application.yaml`, classifique o acesso em `GatewayAccessPolicy` e acrescente uma linha em `docs/matriz-rotas.csv`. O teste `GatewayRouteMatrixTests` falha se uma dessas três partes faltar ou divergir das outras.
 
-`GET` e `PUT /api/v1/estado/sacola` e `POST /api/v1/sacola/revalidar` são encaminhados ao commerce com `Authorization` e o corpo preservados. A revalidação consulta preço e disponibilidade atuais da sacola autenticada sem reservar peças. `GET /api/v1/estado` agregado permanece no adaptador do frontend/Fake API; o Gateway não o envia ao commerce.
-
+`GET` e `PUT /api/v1/estado/sacola` e `POST /api/v1/sacola/revalidar` são encaminhados ao commerce com `Authorization` e o corpo preservados. A revalidação consulta preço e disponibilidade atuais da sacola autenticada sem reservar peças.
 `GET /api/v1/artesao/pedidos-pendentes` e `PATCH /api/v1/pedidos/{id}/estado` são encaminhados ao commerce com o JWT; o PATCH preserva `{ "estado": "producao" }` e o envelope `{dados,erro}`. O commerce verifica papel e titularidade.
 
 O acompanhamento `GET /api/v1/pedidos` e `GET /api/v1/pedidos/{id}` segue para commerce; `GET/POST /api/v1/pedidos/{id}/conversa` segue para community, preservando Authorization e corpo. O contrato interno de participantes do commerce não é encaminhado pelo Gateway.
@@ -103,17 +102,21 @@ As regras dependem de **método e caminho**, sem alterar os destinos do YAML:
 - GET/HEAD `/artesaos/{slug}/pecas/painel` encaminha ao catálogo e exige artesão autenticado (PI-196). O catálogo verifica o slug e a posse pelo JWT. A rota `/artesaos/{slug}/pecas` continua pública e não expõe os estados privados de reserva/venda, mesmo com sessão.
 - Caminhos ambíguos na API, como percent-encoding no caminho, matrix parameters, barras duplicadas e traversal, são recusados com 400. Query params continuam preservados. Rotas novas não herdam acesso público automaticamente.
 
-`GET /estado` continua sem destino/composição. A listagem GET `/admin/mediacoes` é administrativa no contrato; o formulário de comprador que hoje a chama precisará de alinhamento no frontend, sem abrir uma listagem global pela borda.
+A listagem GET `/admin/mediacoes` é administrativa no contrato; o formulário de comprador que hoje a chama precisará de alinhamento no frontend, sem abrir uma listagem global pela borda.
 
 Rejeições do gateway usam `{dados:null,erro:{codigo,mensagem}}`: **401 / NAO_AUTENTICADO**, **403 / SEM_PERMISSAO** ou **400 / REQUISICAO_INVALIDA** para credenciais/caminhos ambíguos. Respostas de negócio dos serviços são preservadas. Health/info permanecem locais e públicos.
 
-Gateway validado não substitui revalidação e autorização nos serviços. A etapa 5 ainda precisa proteger acessos diretos às portas publicadas dos microsserviços, verificar dono do recurso e tratar papel persistido atualizado. O JWT é um snapshot de até 60 minutos; não há revogação imediata no gateway. Frontend, Fake API e Compose não foram migrados nesta etapa. [Arquitetura de comunicação](https://projeto-integrador.atlassian.net/wiki/spaces/DDS/pages/26148865), [contratos](https://projeto-integrador.atlassian.net/wiki/spaces/DDS/pages/28999681).
+Se o serviço de destino não puder ser alcançado (conexão recusada ou timeout), o gateway responde **503 / SERVICO_INDISPONIVEL** no mesmo envelope, sem detalhes internos. Erros que não são falha de conexão não são convertidos.
+
+Matriz de rotas: [docs/matriz-rotas.csv](docs/matriz-rotas.csv) lista método, caminho, serviço dono e acesso esperado de cada rota. É a referência para revisão e para o inventário de chamadas do frontend.
+
+Gateway validado não substitui revalidação e autorização nos serviços. A etapa 5 ainda precisa verificar dono do recurso e tratar papel persistido atualizado. O JWT é um snapshot de até 60 minutos; não há revogação imediata no gateway. [Arquitetura de comunicação](https://projeto-integrador.atlassian.net/wiki/spaces/DDS/pages/26148865), [contratos](https://projeto-integrador.atlassian.net/wiki/spaces/DDS/pages/28999681).
 
 ## Verificação
 
 Com JDK 25 no `JAVA_HOME`, execute `.\mvnw.cmd -B -ntp clean verify`. Os testes geram RSA em execução, gravam somente a pública temporária para o gateway e usam cinco upstreams HTTP locais controlados. Não dependem de Docker, banco ou serviços de negócio reais. A chave privada do emissor de teste fica em memória, sem fixture privada versionada.
 
-O teste cobre 45 exemplos de roteamento, JWT, Cookie/Bearer, falsificação de identidade, CORS/preflight, CSRF, política de papéis e configuração obrigatória. Isso comprova comportamento da borda e o encaminhamento HTTP; não comprova ownership ou revalidação nos serviços ainda pendentes.
+O teste cobre 45 exemplos de roteamento, JWT, Cookie/Bearer, falsificação de identidade, CORS/preflight, CSRF, política de papéis, configuração obrigatória, falha de upstream (`GatewayUpstreamFailureTests`) e a consistência entre `application.yaml`, `GatewayAccessPolicy` e `docs/matriz-rotas.csv` (`GatewayRouteMatrixTests`). Isso comprova comportamento da borda e o encaminhamento HTTP; não comprova ownership ou revalidação nos serviços ainda pendentes.
 
 ## Especificação das rotas
 

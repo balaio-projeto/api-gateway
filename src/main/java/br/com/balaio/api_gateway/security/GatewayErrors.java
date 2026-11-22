@@ -27,6 +27,17 @@ final class GatewayErrors {
                 message = "Entre na sua conta para continuar.";
             }
         }
+        writeEnvelope(response, status, code, message);
+    }
+
+    /** Falha de conexão ou timeout com o serviço de destino: mesmo envelope, sem detalhes internos. */
+    static void writeUnavailable(HttpServletResponse response) throws IOException {
+        writeEnvelope(response, 503, "SERVICO_INDISPONIVEL",
+                "Serviço temporariamente indisponível. Tente novamente em instantes.");
+    }
+
+    private static void writeEnvelope(HttpServletResponse response, int status, String code, String message)
+            throws IOException {
         response.setStatus(status);
         response.setContentType("application/json");
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());

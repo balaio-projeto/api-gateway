@@ -1,6 +1,8 @@
 package br.com.balaio.api_gateway.security;
 
 import java.io.IOException;
+import java.net.ConnectException;
+import java.net.SocketTimeoutException;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -10,6 +12,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 final class GatewayAuthenticationFilter extends OncePerRequestFilter {
@@ -48,7 +51,27 @@ final class GatewayAuthenticationFilter extends OncePerRequestFilter {
             GatewayErrors.write(response, rejection.status());
             return;
         }
-        chain.doFilter(forwarded, response);
+        try {
+            chain.doFilter(forwarded, response);
+        } catch (ServletException | IOException | RuntimeException exception) {
+            if (!isUpstreamFailure(exception) || response.isCommitted()) {
+                throw exception;
+            }
+            GatewayErrors.writeUnavailable(response);
+        }
+    }
+
+    // Procura a causa de conexão/timeout na cadeia de exceções; limite evita laços de causa.
+    static boolean isUpstreamFailure(Throwable throwable) {
+        Throwable current = throwable;
+        for (int depth = 0; current != null && depth < 10; depth++) {
+            if (current instanceof ResourceAccessException || current instanceof ConnectException
+                    || current instanceof SocketTimeoutException) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     private Jwt decode(String token) {
