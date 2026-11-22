@@ -111,3 +111,11 @@ Gateway validado não substitui revalidação e autorização nos serviços. A e
 Com JDK 25 no `JAVA_HOME`, execute `.\mvnw.cmd -B -ntp clean verify`. Os testes geram RSA em execução, gravam somente a pública temporária para o gateway e usam cinco upstreams HTTP locais controlados. Não dependem de Docker, banco ou serviços de negócio reais. A chave privada do emissor de teste fica em memória, sem fixture privada versionada.
 
 O teste cobre 45 exemplos de roteamento, JWT, Cookie/Bearer, falsificação de identidade, CORS/preflight, CSRF, política de papéis e configuração obrigatória. Isso comprova comportamento da borda e o encaminhamento HTTP; não comprova ownership ou revalidação nos serviços ainda pendentes.
+
+## Especificação das rotas
+
+`docs/openapi.yaml` documenta as rotas públicas do gateway. Não é gerada pelo gateway: foi montada a partir de `/v3/api-docs` de catalog, profile, commerce, community e events, mantendo só os caminhos que o `application.yaml` roteia.
+
+As regras de acesso por operação (público, autenticado, artesão, administrador) estão em `GatewayAccessPolicy`. A especificação não as repete em cada operação.
+
+Para atualizar, suba os serviços e baixe os `/v3/api-docs` de cada um. Se uma rota nova for adicionada ao `application.yaml`, ela precisa ser incluída na geração.
