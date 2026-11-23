@@ -59,6 +59,35 @@ class GatewayUpstreamFailureTests {
         assertThat(response.getContentAsString()).contains("\"codigo\":\"SERVICO_INDISPONIVEL\"");
     }
 
+    /**
+     * TC23 (TS10): a falha de conexão não gera reenvio automático pelo gateway. A chave de idempotência
+     * do cliente chega ao serviço de destino para que a repetição manual não duplique efeitos.
+     */
+    @Test
+    void postComFalhaDeConexaoNaoEhReenviadoENaoPerdeAChaveDeIdempotencia() throws Exception {
+        var filter = new GatewayAuthenticationFilter(decoder);
+        var request = new MockHttpServletRequest("POST", "/api/v1/pagamentos/mercado-pago/notificacoes");
+        request.addHeader("Idempotency-Key", "notificacao-42");
+        request.addHeader("x-request-id", "req-42");
+        var response = new MockHttpServletResponse();
+        int[] tentativas = {0};
+        var chain = new MockFilterChain() {
+            @Override
+            public void doFilter(jakarta.servlet.ServletRequest req, jakarta.servlet.ServletResponse res) throws IOException, ServletException {
+                tentativas[0]++;
+                assertThat(((jakarta.servlet.http.HttpServletRequest) req).getHeader("Idempotency-Key")).isEqualTo("notificacao-42");
+                throw new ResourceAccessException("I/O error", new ConnectException("Connection refused"));
+            }
+        };
+
+        filter.doFilter(request, response, chain);
+
+        assertThat(tentativas[0]).isEqualTo(1);
+        assertThat(response.getStatus()).isEqualTo(503);
+        assertThat(response.getContentAsString()).contains("\"codigo\":\"SERVICO_INDISPONIVEL\"")
+                .doesNotContain("notificacao-42", "Connection refused");
+    }
+
     @Test
     void erroQueNaoEhFalhaDeUpstreamPropagaSemSerMascarado() {
         var filter = new GatewayAuthenticationFilter(decoder);
