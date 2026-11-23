@@ -33,7 +33,7 @@ final class GatewayAccessPolicy {
         if (authAction(method, path)) {
             return Access.PUBLIC;
         }
-        if (path.equals("/api/v1/admin/mediacoes") && "POST".equals(method)) {
+        if (path.equals("/api/v1/admin/mediacoes") && ("POST".equals(method) || read)) {
             return Access.AUTHENTICATED;
         }
         // Submissão de evento (PI-210): somente organizador. Admin decide, não submete; a checagem repete no events-service.
@@ -53,7 +53,7 @@ final class GatewayAccessPolicy {
         if ("PATCH".equals(method) && path.matches("/api/v1/artesaos/[^/]+")) {
             return Access.ARTESAO_OR_ADMIN;
         }
-        if (("POST".equals(method) && path.equals("/api/v1/pecas"))
+        if (("POST".equals(method) && (path.equals("/api/v1/pecas") || path.matches("/api/v1/pecas/[^/]+/reativacao")))
                 || (Set.of("PATCH", "DELETE").contains(method) && path.matches("/api/v1/pecas/[^/]+"))
                 || ("PATCH".equals(method) && (path.matches("/api/v1/pedidos/[^/]+/(estado|recusar)")
                         || path.matches("/api/v1/pecas/[^/]+/perguntas/[^/]+")))) {

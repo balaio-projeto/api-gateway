@@ -124,6 +124,25 @@ class ApiGatewayApplicationTests {
     }
 
     @Test
+    void encaminhaRelatorioEResumoDoPainelSomenteParaArtesao() throws Exception {
+        String jwt = token("artesao");
+        var relatorio = send("GET", "/api/v1/artesao/vendas/relatorio?periodo=7d", null, "Authorization", "Bearer " + jwt);
+        assertThat(relatorio.statusCode()).isEqualTo(200);
+        var leitura = received();
+        assertThat(leitura.service()).isEqualTo("commerce");
+        assertThat(leitura.rawPath()).isEqualTo("/api/v1/artesao/vendas/relatorio");
+        assertThat(leitura.rawQuery()).isEqualTo("periodo=7d");
+        assertThat(leitura.header("Authorization")).containsExactly("Bearer " + jwt);
+        var resumo = send("GET", "/api/v1/artesao/painel/resumo", null, "Authorization", "Bearer " + jwt);
+        assertThat(resumo.statusCode()).isEqualTo(200);
+        assertThat(received().rawPath()).isEqualTo("/api/v1/artesao/painel/resumo");
+        for (String caminho : List.of("/api/v1/artesao/vendas/relatorio", "/api/v1/artesao/painel/resumo")) {
+            assertError(send("GET", caminho, null), 401, "NAO_AUTENTICADO");
+            assertError(send("GET", caminho, null, "Authorization", "Bearer " + token("comprador")), 403, "SEM_PERMISSAO");
+        }
+    }
+
+    @Test
     void encaminhaAcompanhamentoEConversaSemPublicarParticipantesInternos() throws Exception {
         String jwt = token("comprador");
         for (String caminho : List.of("/api/v1/pedidos", "/api/v1/pedidos/123")) {
@@ -274,6 +293,8 @@ class ApiGatewayApplicationTests {
                 route("commerce", "/api/v1/pedidos/123/cancelar", "comprador"),
                 route("commerce", "/api/v1/artesao/pedidos-pendentes", "artesao"),
                 route("commerce", "/api/v1/artesao/vendas", "artesao"),
+                route("commerce", "/api/v1/artesao/vendas/relatorio", "artesao"),
+                route("commerce", "/api/v1/artesao/painel/resumo", "artesao"),
                 route("commerce", "/api/v1/estado/sacola", "comprador"),
                 route("community", "/api/v1/pecas/jarra/perguntas", "comprador"),
                 route("community", "/api/v1/pecas/jarra/perguntas/123", "comprador"),
@@ -292,7 +313,9 @@ class ApiGatewayApplicationTests {
                 route("community", "/api/v1/estado/historicoBusca", "comprador"),
                 route("community", "/api/v1/artesaos/ana/reputacao", "comprador"),
                 route("events", "/api/v1/eventos", "comprador"),
-                route("events", "/api/v1/eventos/feira", "comprador"));
+                route("events", "/api/v1/eventos/feira", "comprador"),
+                route("events", "/api/v1/admin/eventos", "admin"),
+                route("events", "/api/v1/admin/eventos/feira", "admin"));
     }
 
     @ParameterizedTest
@@ -665,8 +688,9 @@ class ApiGatewayApplicationTests {
     }
 
     @ParameterizedTest
-    @CsvSource({ "GET,/api/v1/admin/curadoria", "GET,/api/v1/admin/curadoria/123", "GET,/api/v1/admin/mediacoes", "PATCH,/api/v1/admin/mediacoes/123",
-            "PATCH,/api/v1/admin/contas/123/papel" })
+    @CsvSource({ "GET,/api/v1/admin/curadoria", "GET,/api/v1/admin/curadoria/123", "PATCH,/api/v1/admin/mediacoes/123",
+            "PATCH,/api/v1/admin/contas/123/papel", "GET,/api/v1/admin/eventos", "GET,/api/v1/admin/eventos/feira",
+            "POST,/api/v1/admin/eventos/feira/decisao" })
     void administracaoExigeAdmin(String method, String path) throws Exception {
         assertError(send(method, path, "{}", "Authorization", "Bearer " + token("comprador")), 403, "SEM_PERMISSAO");
         assertThat(send(method, path, "{}", "Authorization", "Bearer " + token("admin")).statusCode()).isEqualTo(200);
@@ -685,6 +709,31 @@ class ApiGatewayApplicationTests {
         assertError(send("POST", "/api/v1/eventos", "{}", "Authorization", "Bearer token.invalido.aqui"), 401, "NAO_AUTENTICADO");
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = { "comprador", "artesao", "organizador" })
+    void moderacaoDeEventosRecusaQuemNaoEhAdminSemEncaminhar(String role) throws Exception {
+        assertError(send("GET", "/api/v1/admin/eventos", null), 401, "NAO_AUTENTICADO");
+        assertError(send("GET", "/api/v1/admin/eventos", null, "Authorization", "Bearer " + token(role)), 403, "SEM_PERMISSAO");
+        assertError(send("POST", "/api/v1/admin/eventos/feira/decisao", "{\"decisao\":\"aprovar\"}",
+                "Authorization", "Bearer " + token(role)), 403, "SEM_PERMISSAO");
+    }
+
+    @Test
+    void adminDecideEventoComCorpoEBearerEncaminhadosAoEventsService() throws Exception {
+        String jwt = token("admin");
+        String corpo = "{\"decisao\":\"rejeitar\",\"motivo\":\"Sem data confirmada\"}";
+
+        assertThat(send("POST", "/api/v1/admin/eventos/feira/decisao", corpo, "Authorization", "Bearer " + jwt).statusCode())
+                .isEqualTo(200);
+
+        var request = received();
+        assertThat(request.service()).isEqualTo("events");
+        assertThat(request.method()).isEqualTo("POST");
+        assertThat(request.rawPath()).isEqualTo("/api/v1/admin/eventos/feira/decisao");
+        assertThat(request.body()).isEqualTo(corpo);
+        assertThat(request.header("Authorization")).containsExactly("Bearer " + jwt);
+    }
+
     @Test
     void organizadorCriaEventoComUnicoBearerEncaminhadoAoEventsService() throws Exception {
         String jwt = token("organizador");
@@ -701,6 +750,22 @@ class ApiGatewayApplicationTests {
         assertError(send("POST", "/api/v1/admin/mediacoes", "{}"), 401, "NAO_AUTENTICADO");
         assertThat(send("POST", "/api/v1/admin/mediacoes", "{}", "Authorization", "Bearer " + token("comprador")).statusCode()).isEqualTo(200);
         assertThat(received().service()).isEqualTo("community");
+    }
+
+    @Test
+    void compradorConsultaAsPropriasMediacoesPeloCommunity() throws Exception {
+        assertError(send("GET", "/api/v1/admin/mediacoes", null), 401, "NAO_AUTENTICADO");
+        assertThat(send("GET", "/api/v1/admin/mediacoes", null, "Authorization", "Bearer " + token("comprador")).statusCode()).isEqualTo(200);
+        assertThat(received().service()).isEqualTo("community");
+    }
+
+    @Test
+    void reativacaoDePecaExigeArtesaoEVaiAoCatalog() throws Exception {
+        String caminho = "/api/v1/pecas/vaso/reativacao";
+        assertError(send("POST", caminho, "{}"), 401, "NAO_AUTENTICADO");
+        assertError(send("POST", caminho, "{}", "Authorization", "Bearer " + token("comprador")), 403, "SEM_PERMISSAO");
+        assertThat(send("POST", caminho, "{}", "Authorization", "Bearer " + token("artesao")).statusCode()).isEqualTo(200);
+        assertThat(received().service()).isEqualTo("catalog");
     }
 
     @ParameterizedTest
@@ -724,6 +789,17 @@ class ApiGatewayApplicationTests {
     void rotaEstadoCompostaPermaneceSemEncaminhamento() throws Exception {
         assertThat(send("GET", "/api/v1/estado", null, "Authorization", "Bearer " + token("comprador")).statusCode()).isEqualTo(404);
         assertThat(RECEIVED).isEmpty();
+    }
+
+    @Test
+    void trocaDeSenhaPelaContaNaoEhRoteadaPoisOProfileUsaAlterarSenha() throws Exception {
+        String conta = "/api/v1/conta/2b1f6c1e-6f43-4c1a-9d55-0f6f3c1a2b3c";
+        assertThat(send("POST", conta + "/senha", "{\"senhaAtual\":\"a\",\"novaSenha\":\"b\"}", "Origin", ORIGIN,
+                "Authorization", "Bearer " + token("comprador")).statusCode()).isEqualTo(404);
+        assertThat(RECEIVED).isEmpty();
+        assertThat(send("PATCH", conta, "{\"nome\":\"Ana\"}", "Origin", ORIGIN,
+                "Authorization", "Bearer " + token("comprador")).statusCode()).isEqualTo(200);
+        assertThat(received().service()).isEqualTo("profile");
     }
 
     private HttpResponse<String> send(String method, String path, String body, String... headers) throws Exception {
