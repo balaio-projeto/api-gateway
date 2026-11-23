@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -26,6 +27,9 @@ class GatewayRouteMatrixTests {
     private static final Path ROUTES = Path.of("src", "main", "resources", "application.yaml");
     private static final Path MATRIX = Path.of("docs", "matriz-rotas.csv");
     private static final AntPathMatcher PATHS = new AntPathMatcher();
+    private static final String CABECALHO = "metodo,caminho,servico,acesso,tela,card";
+    private static final Pattern TELA = Pattern.compile("-|menu da conta|/[\\w\\[\\]/-]*(;/[\\w\\[\\]/-]*)*");
+    private static final Pattern CARD = Pattern.compile("PI-\\d+(;PI-\\d+)*");
 
     @Test
     void cadaLinhaDaMatrizTemOAcessoDecididoPelaPolitica() throws IOException {
@@ -69,6 +73,23 @@ class GatewayRouteMatrixTests {
     }
 
     @Test
+    void matrizTemCabecalhoComTelaECard() throws IOException {
+        assertThat(Files.readAllLines(MATRIX, StandardCharsets.UTF_8).getFirst()).isEqualTo(CABECALHO);
+    }
+
+    @Test
+    void cadaLinhaDaMatrizIndicaTelaDoFrontECardDoJira() throws IOException {
+        for (Row row : rows()) {
+            assertThat(row.tela())
+                    .as("tela de %s %s", row.method(), row.path())
+                    .matches(TELA);
+            assertThat(row.card())
+                    .as("card de %s %s", row.method(), row.path())
+                    .matches(CARD);
+        }
+    }
+
+    @Test
     void cadaRotaDoApplicationYamlTemPeloMenosUmaLinhaNaMatriz() throws IOException {
         var rows = rows();
         for (Route route : routes()) {
@@ -87,8 +108,9 @@ class GatewayRouteMatrixTests {
                 continue;
             }
             String[] columns = line.split(",", -1);
-            assertThat(columns).as("linha da matriz: %s", line).hasSize(4);
-            rows.add(new Row(columns[0].trim(), columns[1].trim(), columns[2].trim(), columns[3].trim()));
+            assertThat(columns).as("linha da matriz: %s", line).hasSize(6);
+            rows.add(new Row(columns[0].trim(), columns[1].trim(), columns[2].trim(), columns[3].trim(),
+                    columns[4].trim(), columns[5].trim()));
         }
         assertThat(rows).isNotEmpty();
         return rows;
@@ -124,7 +146,7 @@ class GatewayRouteMatrixTests {
         return routes;
     }
 
-    private record Row(String method, String path, String servico, String acesso) {
+    private record Row(String method, String path, String servico, String acesso, String tela, String card) {
     }
 
     private record Route(String id, List<String> patterns, Set<String> methods) {

@@ -18,7 +18,7 @@ Os caminhos compartilhados são específicos para evitar conflito: `/pecas/{slug
 
 O webhook do Checkout Pro usa apenas `POST /api/v1/pagamentos/mercado-pago/notificacoes`, encaminhado ao commerce com query `data.id` e cabeçalhos `x-signature`/`x-request-id` intactos. A URL pública configurada no Mercado Pago precisa ser HTTPS e alcançável pelo provedor; o commerce valida a assinatura antes de persistir a notificação. Nenhuma rota interna de serviço é exposta pelo gateway.
 
-As rotas de recomendações por IA e indicadores administrativos ficam para uma etapa posterior, conforme o escopo atual. Ao criar uma rota nova, adicione o caminho ao destino correto em `src/main/resources/application.yaml`, classifique o acesso em `GatewayAccessPolicy` e acrescente uma linha em `docs/matriz-rotas.csv`. O teste `GatewayRouteMatrixTests` falha se uma dessas três partes faltar ou divergir das outras.
+As rotas de recomendações por IA e indicadores administrativos ficam para uma etapa posterior, conforme o escopo atual. Ao criar uma rota nova, adicione o caminho ao destino correto em `src/main/resources/application.yaml`, classifique o acesso em `GatewayAccessPolicy` e acrescente uma linha em `docs/matriz-rotas.csv` com a tela do frontend e o card. O teste `GatewayRouteMatrixTests` falha se uma dessas três partes faltar ou divergir das outras.
 
 `GET` e `PUT /api/v1/estado/sacola` e `POST /api/v1/sacola/revalidar` são encaminhados ao commerce com `Authorization` e o corpo preservados. A revalidação consulta preço e disponibilidade atuais da sacola autenticada sem reservar peças.
 `GET /api/v1/artesao/pedidos-pendentes` e `PATCH /api/v1/pedidos/{id}/estado` são encaminhados ao commerce com o JWT; o PATCH preserva `{ "estado": "producao" }` e o envelope `{dados,erro}`. O commerce verifica papel e titularidade.
@@ -108,7 +108,7 @@ Rejeições do gateway usam `{dados:null,erro:{codigo,mensagem}}`: **401 / NAO_A
 
 Se o serviço de destino não puder ser alcançado (conexão recusada ou timeout), o gateway responde **503 / SERVICO_INDISPONIVEL** no mesmo envelope, sem detalhes internos. Erros que não são falha de conexão não são convertidos.
 
-Matriz de rotas: [docs/matriz-rotas.csv](docs/matriz-rotas.csv) lista método, caminho, serviço dono e acesso esperado de cada rota. É a referência para revisão e para o inventário de chamadas do frontend.
+Matriz de rotas: [docs/matriz-rotas.csv](docs/matriz-rotas.csv) lista, no formato `metodo,caminho,servico,acesso,tela,card`, o método, o caminho, o serviço dono, o acesso esperado, as telas do frontend que consomem a rota (rotas do Next.js separadas por `;`, `-` quando nenhuma tela chama) e os cards do Jira responsáveis (PI-249). É a referência para revisão e para o inventário de chamadas do frontend; `GatewayRouteMatrixTests` também recusa linha sem tela ou card.
 
 Gateway validado não substitui revalidação e autorização nos serviços. A etapa 5 ainda precisa verificar dono do recurso e tratar papel persistido atualizado. O JWT é um snapshot de até 60 minutos; não há revogação imediata no gateway. [Arquitetura de comunicação](https://projeto-integrador.atlassian.net/wiki/spaces/DDS/pages/26148865), [contratos](https://projeto-integrador.atlassian.net/wiki/spaces/DDS/pages/28999681).
 
