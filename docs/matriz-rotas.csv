@@ -20,6 +20,8 @@ POST,/api/v1/auth/logout,profile,PUBLIC,menu da conta,PI-225;PI-168
 POST,/api/v1/auth/alterar-senha,profile,AUTHENTICATED,/account/details,PI-226;PI-209
 GET,/api/v1/usuario,profile,AUTHENTICATED,/account;/account/details,PI-226;PI-168
 PATCH,/api/v1/usuario,profile,AUTHENTICATED,/account/details,PI-226;PI-209
+PUT,/api/v1/usuario/imagem,profile,AUTHENTICATED,/account/details,PI-226
+DELETE,/api/v1/usuario/imagem,profile,AUTHENTICATED,/account/details,PI-226
 GET,/api/v1/usuario/enderecos,profile,AUTHENTICATED,/account/addresses;/checkout,PI-226;PI-40;PI-189
 POST,/api/v1/usuario/enderecos,profile,AUTHENTICATED,/account/addresses;/checkout,PI-226;PI-40;PI-189
 GET,/api/v1/usuario/enderecos/{id},profile,AUTHENTICATED,/account/addresses,PI-226;PI-189
@@ -44,7 +46,8 @@ POST,/api/v1/coletivos,profile,ADMIN,-,PI-183
 GET,/api/v1/coletivos/{slug},profile,PUBLIC,/collectives/[slug],PI-34;PI-183
 GET,/api/v1/admin/curadoria,profile,ADMIN,/admin/criteria,PI-28;PI-177
 POST,/api/v1/admin/curadoria/{id}/decisao,profile,ADMIN,/admin/criteria,PI-28;PI-177
-PATCH,/api/v1/admin/contas/{id}/papel,profile,ADMIN,-,PI-210
+GET,/api/v1/admin/contas,profile,ADMIN,/admin/accounts,PI-210
+PATCH,/api/v1/admin/contas/{id}/papel,profile,ADMIN,/admin/accounts,PI-210
 POST,/api/v1/checkout,commerce,AUTHENTICATED,/checkout,PI-233;PI-190;PI-54
 GET,/api/v1/fretes,commerce,PUBLIC,/pieces/[slug];/cart;/checkout,PI-232;PI-212
 GET,/api/v1/pedidos,commerce,AUTHENTICATED,/orders,PI-234;PI-192

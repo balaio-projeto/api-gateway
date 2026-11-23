@@ -94,6 +94,27 @@ class ApiGatewayApplicationTests {
         assertThat(contentType.getParameter("boundary")).isEqualTo("foto-boundary");
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = { "comprador", "artesao", "organizador", "admin" })
+    void fotoDaContaAceitaQualquerPapelEEncaminhaMultipartDeAte3MiB(String role) throws Exception {
+        String body = "--foto-boundary\r\nContent-Disposition: form-data; name=\"arquivo\"; filename=\"foto.png\"\r\n"
+                + "Content-Type: image/png\r\n\r\n" + "x".repeat(3 * 1024 * 1024 - 256) + "\r\n--foto-boundary--\r\n";
+        assertError(send("PUT", "/api/v1/usuario/imagem", body,
+                "Content-Type", "multipart/form-data; boundary=foto-boundary"), 401, "NAO_AUTENTICADO");
+        assertError(send("DELETE", "/api/v1/usuario/imagem", null), 401, "NAO_AUTENTICADO");
+        var envio = send("PUT", "/api/v1/usuario/imagem", body, "Authorization", "Bearer " + token(role),
+                "Content-Type", "multipart/form-data; boundary=foto-boundary");
+        assertThat(envio.statusCode()).isEqualTo(200);
+        var request = received();
+        assertThat(request.service()).isEqualTo("profile");
+        assertThat(request.method()).isEqualTo("PUT");
+        assertThat(request.rawPath()).isEqualTo("/api/v1/usuario/imagem");
+        assertThat(request.body()).isEqualTo(body);
+        assertThat(send("DELETE", "/api/v1/usuario/imagem", null, "Authorization", "Bearer " + token(role))
+                .statusCode()).isEqualTo(200);
+        assertThat(received().method()).isEqualTo("DELETE");
+    }
+
     @Test
     void encaminhaGestaoDePedidosDoArtesaoComJwtECorpo() throws Exception {
         String jwt = token("artesao");
@@ -284,6 +305,7 @@ class ApiGatewayApplicationTests {
                 route("profile", "/api/v1/coletivos/rio", "comprador"),
                 route("profile", "/api/v1/admin/curadoria", "admin"),
                 route("profile", "/api/v1/admin/curadoria/solicitacao", "admin"),
+                route("profile", "/api/v1/admin/contas", "admin"),
                 route("commerce", "/api/v1/checkout", "comprador"),
                 route("commerce", "/api/v1/fretes", "comprador"),
                 route("commerce", "/api/v1/pedidos", "comprador"),
@@ -689,7 +711,7 @@ class ApiGatewayApplicationTests {
 
     @ParameterizedTest
     @CsvSource({ "GET,/api/v1/admin/curadoria", "GET,/api/v1/admin/curadoria/123", "PATCH,/api/v1/admin/mediacoes/123",
-            "PATCH,/api/v1/admin/contas/123/papel", "GET,/api/v1/admin/eventos", "GET,/api/v1/admin/eventos/feira",
+            "PATCH,/api/v1/admin/contas/123/papel", "GET,/api/v1/admin/contas", "GET,/api/v1/admin/eventos", "GET,/api/v1/admin/eventos/feira",
             "POST,/api/v1/admin/eventos/feira/decisao" })
     void administracaoExigeAdmin(String method, String path) throws Exception {
         assertError(send(method, path, "{}", "Authorization", "Bearer " + token("comprador")), 403, "SEM_PERMISSAO");
