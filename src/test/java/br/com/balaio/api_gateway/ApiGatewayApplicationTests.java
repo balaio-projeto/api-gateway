@@ -329,6 +329,8 @@ class ApiGatewayApplicationTests {
                 route("community", "/api/v1/videos/video/visualizacoes", "comprador"),
                 route("community", "/api/v1/admin/mediacoes", "admin"),
                 route("community", "/api/v1/admin/mediacoes/123", "admin"),
+                route("community", "/api/v1/admin/videos", "admin"),
+                route("community", "/api/v1/admin/videos/123/suspensao", "admin"),
                 route("community", "/api/v1/estado/favoritos", "comprador"),
                 route("community", "/api/v1/estado/videosCurtidos", "comprador"),
                 route("community", "/api/v1/estado/videosSalvos", "comprador"),
@@ -712,7 +714,8 @@ class ApiGatewayApplicationTests {
     @ParameterizedTest
     @CsvSource({ "GET,/api/v1/admin/curadoria", "GET,/api/v1/admin/curadoria/123", "PATCH,/api/v1/admin/mediacoes/123",
             "PATCH,/api/v1/admin/contas/123/papel", "GET,/api/v1/admin/contas", "GET,/api/v1/admin/eventos", "GET,/api/v1/admin/eventos/feira",
-            "POST,/api/v1/admin/eventos/feira/decisao" })
+            "POST,/api/v1/admin/eventos/feira/decisao", "GET,/api/v1/admin/videos", "POST,/api/v1/admin/videos/123/suspensao",
+            "POST,/api/v1/admin/videos/123/reativacao" })
     void administracaoExigeAdmin(String method, String path) throws Exception {
         assertError(send(method, path, "{}", "Authorization", "Bearer " + token("comprador")), 403, "SEM_PERMISSAO");
         assertThat(send(method, path, "{}", "Authorization", "Bearer " + token("admin")).statusCode()).isEqualTo(200);
@@ -779,6 +782,24 @@ class ApiGatewayApplicationTests {
         assertError(send("GET", "/api/v1/admin/mediacoes", null), 401, "NAO_AUTENTICADO");
         assertThat(send("GET", "/api/v1/admin/mediacoes", null, "Authorization", "Bearer " + token("comprador")).statusCode()).isEqualTo(200);
         assertThat(received().service()).isEqualTo("community");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "comprador", "admin" })
+    void cancelamentoDeMediacaoChegaAoCommunityParaQualquerUsuarioAutenticado(String role) throws Exception {
+        String caminho = "/api/v1/admin/mediacoes/123/cancelamento";
+        assertError(send("POST", caminho, null), 401, "NAO_AUTENTICADO");
+        assertThat(send("POST", caminho, null, "Authorization", "Bearer " + token(role)).statusCode()).isEqualTo(200);
+        var request = received();
+        assertThat(request.service()).isEqualTo("community");
+        assertThat(request.rawPath()).isEqualTo(caminho);
+    }
+
+    @ParameterizedTest
+    @CsvSource({ "GET,/api/v1/admin/mediacoes/123/cancelamento", "POST,/api/v1/admin/mediacoes/123/cancelamento/extra",
+            "POST,/api/v1/admin/mediacoes/123/outra-acao" })
+    void somenteOPostDeCancelamentoDeMediacaoEscapaDaExigenciaDeAdmin(String method, String path) throws Exception {
+        assertError(send(method, path, "{}", "Authorization", "Bearer " + token("comprador")), 403, "SEM_PERMISSAO");
     }
 
     @Test
