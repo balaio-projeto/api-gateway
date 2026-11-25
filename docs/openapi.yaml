@@ -5,7 +5,11 @@ info:
   description: >-
     Rotas públicas do gateway. Gerado a partir das especificações dos serviços (catalog, profile, commerce, community e
     events), filtrado pelas rotas de application.yaml. As regras de acesso (público, autenticado, artesão,
-    administrador) estão em GatewayAccessPolicy e não estão refletidas por operação nesta especificação.
+    administrador) estão em GatewayAccessPolicy. As operações revisadas em 25/11/2026 (notificações, cupons,
+    frete local, vendas do artesão, moderação de vídeos e de eventos, contas e curadoria administrativas, endereços e
+    busca do catálogo) trazem o papel exigido na descrição e em `security`; nas demais isso ainda não está refletido por
+    operação. Erros seguem o envelope `{ "dados": null, "erro": { "codigo", "mensagem" } }`; o gateway responde 401
+    `NAO_AUTENTICADO` sem token válido e 403 `SEM_PERMISSAO` quando o papel não é aceito.
 servers:
   - url: http://localhost:8080
     description: Desenvolvimento local
@@ -15,13 +19,23 @@ paths:
       tags:
         - Catálogo
       summary: Listar peças publicadas
+      description: >-
+        Público. A busca textual `q` ignora acentos e maiúsculas e exige que a peça case com todas as palavras
+        relevantes informadas (até 8; artigos e preposições como "de", "da", "com" e "para" são descartados quando há
+        outras palavras). Cada palavra casa com o texto da peça (nome, slug do artesão, território, técnica, categoria,
+        tipo e história) no singular ou no plural ("vasos" encontra "vaso", "colares" encontra "colar", "potes"
+        encontra "pote") ou com o nome ou o ateliê de um artesão público: nesse caso entram todas as peças daquele
+        artesão. A lista de artesãos é consultada no profile-service com cache de 30 segundos; se o profile estiver
+        indisponível, a busca continua só pelo texto das peças.
       operationId: listar
       parameters:
         - name: q
           in: query
           required: false
+          description: Termos de busca; todas as palavras precisam casar (ver descrição da operação).
           schema:
             type: string
+          example: vasos de barro maria
         - name: tecnica
           in: query
           required: false
@@ -52,6 +66,16 @@ paths:
           required: false
           schema:
             type: boolean
+        - name: precoMin
+          in: query
+          required: false
+          schema:
+            type: number
+        - name: precoMax
+          in: query
+          required: false
+          schema:
+            type: number
         - name: ordenar
           in: query
           required: false
@@ -285,32 +309,53 @@ paths:
     get:
       tags:
         - enderecos-comprador-controller
+      summary: Endereços de entrega da conta autenticada (principal primeiro)
+      description: Autenticado, papel comprador ou artesão (artesão também compra). Outros papéis recebem 403.
       operationId: listar
       responses:
         '200':
           description: OK
           content:
-            '*/*':
+            application/json:
               schema:
                 $ref: '#/components/schemas/CadastroPublicoRespostaListEndereco'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+      security:
+        - bearer-jwt: []
     post:
       tags:
         - enderecos-comprador-controller
+      summary: Cadastra endereço de entrega; o primeiro vira o principal
+      description: Autenticado, papel comprador ou artesão.
       operationId: criar
       requestBody:
         content:
           application/json:
             schema:
-              type: object
-              additionalProperties: {}
+              $ref: '#/components/schemas/EnderecoRequest'
         required: true
       responses:
         '200':
           description: OK
           content:
-            '*/*':
+            application/json:
               schema:
                 $ref: '#/components/schemas/CadastroPublicoRespostaEndereco'
+        '400':
+          description: '`REQUISICAO_INVALIDA` — campo ausente, longo demais, CEP inválido ou bairro sem cidade e UF.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+      security:
+        - bearer-jwt: []
   /api/v1/coletivos:
     get:
       tags:
@@ -603,6 +648,10 @@ paths:
     patch:
       tags:
         - enderecos-comprador-controller
+      summary: Atualiza parcialmente um endereço próprio
+      description: >-
+        Autenticado, papel comprador ou artesão. Campos ausentes mantêm o valor atual; `numero` e `complemento`
+        enviados como null ou em branco são apagados. `principal: true` torna este o endereço principal.
       operationId: atualizar
       parameters:
         - name: id
@@ -615,16 +664,33 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              additionalProperties: {}
+              $ref: '#/components/schemas/EnderecoAtualizacaoRequest'
         required: true
       responses:
         '200':
           description: OK
           content:
-            '*/*':
+            application/json:
               schema:
                 $ref: '#/components/schemas/CadastroPublicoRespostaEndereco'
+        '400':
+          description: '`REQUISICAO_INVALIDA`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '404':
+          description: '`RECURSO_NAO_ENCONTRADO` — o endereço não existe ou é de outra conta.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+      security:
+        - bearer-jwt: []
   /api/v1/usuario:
     get:
       tags:
@@ -745,6 +811,12 @@ paths:
     patch:
       tags:
         - preferencias-controller
+      summary: Atualiza parcialmente as configurações do ateliê, inclusive retirada e entrega local
+      description: >-
+        Somente o artesão dono do ateliê. Campos ausentes mantêm o valor atual; campos desconhecidos são recusados.
+        Com `aceitaRetirada: true`, `retiradaBairro` e `retiradaCidade` são obrigatórios (até 80 caracteres cada, sem
+        o endereço completo — o endereço exato é combinado pela conversa do pedido). Com `aceitaEntregaLocal: true`,
+        `cepOrigem` é obrigatório. Essas opções alimentam `retirada-atelie` e `entrega-local` em `GET /api/v1/fretes`.
       operationId: atualizar_2
       parameters:
         - name: slug
@@ -756,8 +828,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              additionalProperties: {}
+              $ref: '#/components/schemas/ConfiguracoesRequest'
         required: true
       responses:
         '200':
@@ -766,6 +837,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CadastroPublicoRespostaConfiguracoes'
+        '400':
+          description: '`REQUISICAO_INVALIDA`, com o campo problemático em `erro.campos`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '404':
+          description: '`RECURSO_NAO_ENCONTRADO` — perfil inexistente.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+      security:
+        - bearer-jwt: []
   /api/v1/arquivos/perfis/{midiaId}:
     get:
       tags:
@@ -834,14 +923,278 @@ paths:
     get:
       tags:
         - curadoria-controller
+      summary: Fila de solicitações do selo, filtrada e paginada
+      description: >-
+        Somente administrador. Ordena as decididas mais recentes depois das ainda não decididas (decidido_em desc,
+        nulos primeiro) e, em seguida, por data de solicitação. `pecasPublicadas` só é calculado para solicitações
+        pendentes (consulta o catálogo). A página é ajustada para o intervalo existente.
       operationId: fila
+      parameters:
+        - name: situacao
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - pendente
+              - ajuste
+              - aprovada
+              - todas
+            default: pendente
+        - name: busca
+          in: query
+          required: false
+          description: Trecho do nome do artesão ou do ateliê (sem diferenciar maiúsculas), até 100 caracteres.
+          schema:
+            type: string
+            maxLength: 100
+        - name: pagina
+          in: query
+          required: false
+          description: Página a partir de 1.
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            default: 1
+        - name: tamanho
+          in: query
+          required: false
+          description: Itens por página; valores menores que 1 usam o padrão e o máximo é 50.
+          schema:
+            type: integer
+            format: int32
+            default: 10
+            maximum: 50
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CadastroPublicoRespostaListSolicitacao'
+                $ref: '#/components/schemas/RespostaPaginadaSolicitacao'
+        '400':
+          description: '`REQUISICAO_INVALIDA` — `situacao` desconhecida ou `busca` longa demais (em `erro.campos`).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '503':
+          description: '`CATALOGO_INDISPONIVEL` ou `SERVICO_INDISPONIVEL`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+      security:
+        - bearer-jwt: []
+  /api/v1/admin/contas:
+    get:
+      tags:
+        - organizador-admin-controller
+      summary: Lista contas administráveis (paginado) ou busca uma conta pelo e-mail
+      description: >-
+        Somente administrador. Sem `email`, entra no modo listagem: devolve contas de comprador e organizador (nunca
+        administradores ou artesãos), organizadores primeiro e depois por nome, com `paginacao`. Com `email`, entra no
+        modo busca exata: devolve uma única conta de qualquer papel, sem `paginacao`, e os demais parâmetros são
+        ignorados.
+      operationId: buscarOuListar
+      parameters:
+        - name: email
+          in: query
+          required: false
+          description: Modo busca por e-mail exato.
+          schema:
+            type: string
+            format: email
+        - name: busca
+          in: query
+          required: false
+          description: Modo listagem. Trecho do nome ou do e-mail, até 100 caracteres.
+          schema:
+            type: string
+            maxLength: 100
+        - name: papel
+          in: query
+          required: false
+          description: Modo listagem. `todos` traz comprador e organizador.
+          schema:
+            type: string
+            enum:
+              - todos
+              - comprador
+              - organizador
+            default: todos
+        - name: pagina
+          in: query
+          required: false
+          description: Modo listagem. Página a partir de 1.
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            default: 1
+        - name: tamanho
+          in: query
+          required: false
+          description: Modo listagem. Itens por página, máximo 50.
+          schema:
+            type: integer
+            format: int32
+            default: 10
+            maximum: 50
+      responses:
+        '200':
+          description: Listagem paginada (sem `email`) ou conta encontrada (com `email`).
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/RespostaPaginadaContaAdmin'
+                  - $ref: '#/components/schemas/CadastroPublicoRespostaContaAdmin'
+        '400':
+          description: '`EMAIL_INVALIDO` (modo e-mail) ou `REQUISICAO_INVALIDA` (filtro `papel` ou `busca` inválido).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '404':
+          description: '`CONTA_NAO_ENCONTRADA` — nenhuma conta com o e-mail informado.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+        '500':
+          description: '`CONSULTA_CONTA_INDISPONIVEL`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+      security:
+        - bearer-jwt: []
+  /api/v1/admin/contas/{id}/papel:
+    patch:
+      tags:
+        - organizador-admin-controller
+      summary: Atribui ou remove o papel organizador (aceita somente organizador ou comprador)
+      description: Somente administrador. Responde 204 sem corpo.
+      operationId: alterarPapel
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlterarPapelRequisicao'
+        required: true
+      responses:
+        '204':
+          description: Papel alterado.
+        '400':
+          description: '`REQUISICAO_INVALIDA`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '404':
+          description: '`CONTA_NAO_ENCONTRADA`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+        '409':
+          description: '`TRANSICAO_PAPEL_INVALIDA` ou `CONFLITO_ATUALIZACAO`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+      security:
+        - bearer-jwt: []
+  /api/v1/notificacoes:
+    get:
+      tags:
+        - Notificações
+      summary: Caixa de notificações da conta autenticada
+      description: >-
+        Qualquer usuário autenticado. Traz as não lidas e as lidas há menos de 24 horas, mais recentes primeiro, com o
+        total de não lidas. Resposta com `Cache-Control: no-store`.
+      operationId: listarNotificacoes
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CadastroPublicoRespostaCaixaNotificacoes'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+      security:
+        - bearer-jwt: []
+  /api/v1/notificacoes/leitura:
+    post:
+      tags:
+        - Notificações
+      summary: Marca todas as notificações da conta como lidas
+      description: Qualquer usuário autenticado. Sem corpo. Devolve a caixa atualizada com `naoLidas` igual a 0.
+      operationId: marcarTodasNotificacoesLidas
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CadastroPublicoRespostaCaixaNotificacoes'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+      security:
+        - bearer-jwt: []
+  /api/v1/notificacoes/{id}/leitura:
+    patch:
+      tags:
+        - Notificações
+      summary: Marca uma notificação própria como lida (idempotente)
+      description: Qualquer usuário autenticado. Sem corpo. Repetir mantém a data da primeira leitura.
+      operationId: marcarNotificacaoLida
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Caixa atualizada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CadastroPublicoRespostaCaixaNotificacoes'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '404':
+          description: '`RECURSO_NAO_ENCONTRADO` — notificação inexistente ou de outra conta.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+      security:
+        - bearer-jwt: []
   /api/v1/estado/sacola:
     get:
       tags:
@@ -857,6 +1210,9 @@ paths:
     put:
       tags:
         - sacola-controller
+      description: >-
+        Comprador ou artesão autenticado (artesão também compra). Recusa com 422 `PECA_DO_PROPRIO_ATELIE` quando a
+        sacola recebe peça do próprio ateliê de quem compra.
       operationId: substituir
       requestBody:
         content:
@@ -871,6 +1227,12 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/Envelope'
+        '422':
+          description: '`PECA_DO_PROPRIO_ATELIE` — não é possível comprar peças do próprio ateliê.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
   /api/v1/sacola/revalidar:
     post:
       tags:
@@ -917,6 +1279,13 @@ paths:
     post:
       tags:
         - pedidos-controller
+      summary: Cria o pedido e inicia o pagamento, com cupom opcional
+      description: >-
+        Comprador ou artesão autenticado (artesão não compra do próprio ateliê). Com `cupom`, vale só aquele código;
+        sem `cupom`, entra automaticamente a promoção vigente de maior desconto. Cupons e promoções são custeados pela
+        plataforma e não acumulam. O cupom é revalidado dentro da transação; a repetição com a mesma
+        `Idempotency-Key` devolve o pedido existente sem consumir outro uso. O total nunca fica abaixo de R$ 1,00.
+        `freteId` aceita também `retirada-atelie` e `entrega-local` quando cotados em `GET /api/v1/fretes`.
       operationId: checkout
       parameters:
         - name: Idempotency-Key
@@ -924,6 +1293,7 @@ paths:
           required: true
           schema:
             type: string
+            maxLength: 160
       requestBody:
         content:
           application/json:
@@ -931,12 +1301,283 @@ paths:
               $ref: '#/components/schemas/Checkout'
         required: true
       responses:
+        '202':
+          description: Pedido criado (ou já existente para a mesma chave), aguardando pagamento.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopePedidoComEndereco'
+        '400':
+          description: '`REQUISICAO_INVALIDA`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '404':
+          description: '`ENDERECO_NAO_ENCONTRADO` — `enderecoId` não encontrado.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+        '409':
+          description: >-
+            `CHECKOUT_CONFLITANTE`, `PEDIDO_CONFLITANTE` (peças de ateliês diferentes), `PECA_INDISPONIVEL`,
+            `FRETE_INDISPONIVEL` ou `RESERVA_CONFLITANTE`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+        '422':
+          description: >-
+            `PECA_DO_PROPRIO_ATELIE`, `ENDERECO_INCOMPLETO` ou recusa de cupom: `CUPOM_INVALIDO`, `CUPOM_INATIVO`,
+            `CUPOM_AINDA_NAO_VALIDO`, `CUPOM_EXPIRADO`, `CUPOM_ESGOTADO`, `CUPOM_LIMITE_COMPRADOR`,
+            `CUPOM_PEDIDO_MINIMO`, `CUPOM_SEM_DESCONTO` ou `PROMOCAO_ENCERRADA`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+        '503':
+          description: '`CATALOGO_INDISPONIVEL`, `PERFIL_INDISPONIVEL` ou `PAGAMENTO_INDISPONIVEL`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+      security:
+        - bearer-jwt: []
+  /api/v1/checkout/cupom:
+    post:
+      tags:
+        - pedidos-controller
+      summary: Prévia do desconto de um cupom (ou da melhor promoção automática) para os itens do checkout
+      description: >-
+        Comprador ou artesão autenticado. Não reserva nem consome o cupom. Sem `cupom`, devolve a melhor promoção
+        automática aplicável ou `dados: null` quando não há nenhuma. `frete` (0 a 10000) é o valor da entrega
+        escolhida; se ausente, cupons de frete grátis são aceitos sem calcular desconto de frete. Até 20 itens.
+      operationId: simularCupom
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SimulacaoCupomRequest'
+        required: true
+      responses:
+        '200':
+          description: Prévia do desconto, ou `dados` nulo quando não há promoção automática aplicável.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopePreviaCupom'
+        '400':
+          description: '`REQUISICAO_INVALIDA` — itens ausentes, mais de 20 itens, item inválido ou frete fora da faixa.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '409':
+          description: '`PECA_INDISPONIVEL` ou `PEDIDO_CONFLITANTE` (peças de ateliês diferentes).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+        '422':
+          description: >-
+            `PECA_DO_PROPRIO_ATELIE` ou recusa de cupom: `CUPOM_INVALIDO`, `CUPOM_INATIVO`, `CUPOM_AINDA_NAO_VALIDO`,
+            `CUPOM_EXPIRADO`, `CUPOM_ESGOTADO`, `CUPOM_LIMITE_COMPRADOR`, `CUPOM_PEDIDO_MINIMO` ou `CUPOM_SEM_DESCONTO`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+        '503':
+          description: '`CATALOGO_INDISPONIVEL`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+      security:
+        - bearer-jwt: []
+  /api/v1/admin/cupons:
+    get:
+      tags:
+        - Cupons
+      summary: Lista todos os cupons e promoções automáticas (mais recentes primeiro)
+      description: Somente administrador.
+      operationId: listarCupons
+      responses:
         '200':
           description: OK
           content:
-            '*/*':
+            application/json:
               schema:
-                $ref: '#/components/schemas/Envelope'
+                $ref: '#/components/schemas/EnvelopeListaCupom'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+      security:
+        - bearer-jwt: []
+    post:
+      tags:
+        - Cupons
+      summary: Cria cupom (com código) ou promoção automática (sem código)
+      description: Somente administrador. O código é normalizado para maiúsculas e precisa ser único.
+      operationId: criarCupom
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CupomRequest'
+        required: true
+      responses:
+        '201':
+          description: Criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeCupom'
+        '400':
+          description: '`CUPOM_INVALIDO`, com os problemas por campo em `erro.campos`; ou `REQUISICAO_INVALIDA`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+      security:
+        - bearer-jwt: []
+  /api/v1/admin/cupons/{id}:
+    get:
+      tags:
+        - Cupons
+      summary: Consulta um cupom
+      description: Somente administrador.
+      operationId: consultarCupom
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeCupom'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '404':
+          description: '`CUPOM_NAO_ENCONTRADO`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+      security:
+        - bearer-jwt: []
+    put:
+      tags:
+        - Cupons
+      summary: Substitui os dados do cupom
+      description: >-
+        Somente administrador. Mesmas regras da criação; `limiteUsos` não pode ficar abaixo dos usos já
+        registrados.
+      operationId: editarCupom
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CupomRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeCupom'
+        '400':
+          description: '`CUPOM_INVALIDO`, com os problemas por campo em `erro.campos`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '404':
+          description: '`CUPOM_NAO_ENCONTRADO`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+      security:
+        - bearer-jwt: []
+  /api/v1/admin/cupons/{id}/situacao:
+    patch:
+      tags:
+        - Cupons
+      summary: Ativa ou desativa o cupom
+      description: Somente administrador.
+      operationId: definirSituacaoCupom
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SituacaoCupomRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeCupom'
+        '400':
+          description: '`CUPOM_INVALIDO` — `ativo` ausente (em `erro.campos`).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '404':
+          description: '`CUPOM_NAO_ENCONTRADO`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+      security:
+        - bearer-jwt: []
   /api/v1/pedidos/{id}/recusar:
     patch:
       tags:
@@ -1010,18 +1651,26 @@ paths:
     get:
       tags:
         - pedidos-controller
+      summary: Pedidos de quem compra (comprador ou artesão), com situação do pagamento
       operationId: listar
       responses:
         '200':
           description: OK
           content:
-            '*/*':
+            application/json:
               schema:
-                $ref: '#/components/schemas/Envelope'
+                $ref: '#/components/schemas/EnvelopeListaPedidoComPagamento'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+      security:
+        - bearer-jwt: []
   /api/v1/pedidos/{id}:
     get:
       tags:
         - pedidos-controller
+      summary: Detalhe do pedido para quem comprou, com endereço de entrega e desconto aplicado
       operationId: consultar_1
       parameters:
         - name: id
@@ -1034,45 +1683,153 @@ paths:
         '200':
           description: OK
           content:
-            '*/*':
+            application/json:
               schema:
-                $ref: '#/components/schemas/Envelope'
+                $ref: '#/components/schemas/EnvelopePedidoComEndereco'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '404':
+          description: '`PEDIDO_NAO_ENCONTRADO`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+      security:
+        - bearer-jwt: []
   /api/v1/fretes:
     get:
       tags:
         - pedidos-controller
+      summary: Cota as opções de entrega, incluindo retirada no ateliê e entrega local
+      description: >-
+        Público. Sem `cep`, devolve uma opção demonstrativa. Com `cep` e sem `itens`, cota um pacote genérico só com
+        transportadoras. Com `itens` (todos do mesmo ateliê), devolve as transportadoras e, ao final, as opções locais
+        do ateliê, ambas com `provedor` `balaio_local`: `entrega-local` (modalidade `entrega_local`) quando o artesão
+        aceita entrega local e os primeiros dígitos do CEP de destino (padrão 5) coincidem com o CEP de origem; e
+        `retirada-atelie` (modalidade `retirada`, R$ 0,00) quando o artesão aceita retirada — o `detalhe` mostra só
+        bairro e cidade. Nessas opções o prazo é combinado pela conversa do pedido.
       operationId: fretes
+      parameters:
+        - name: cep
+          in: query
+          required: false
+          description: CEP de destino.
+          schema:
+            type: string
+          example: 01310-100
+        - name: itens
+          in: query
+          required: false
+          description: Até 20 itens no formato `slug:quantidade` (quantidade de 1 a 3), separados por vírgula, sem repetir slug.
+          schema:
+            type: string
+          example: vaso-de-barro:1,colar-de-sementes:2
       responses:
         '200':
           description: OK
           content:
-            '*/*':
+            application/json:
               schema:
-                $ref: '#/components/schemas/Envelope'
+                $ref: '#/components/schemas/EnvelopeListaOpcaoFrete'
+        '400':
+          description: '`CEP_INVALIDO` ou `REQUISICAO_INVALIDA` (itens fora do formato).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+        '409':
+          description: '`PECA_INDISPONIVEL` ou `ATELIES_DIFERENTES`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+        '503':
+          description: '`FRETE_INDISPONIVEL` ou `CATALOGO_INDISPONIVEL`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
   /api/v1/artesao/vendas:
     get:
       tags:
         - pedidos-controller
+      summary: Vendas do artesão autenticado, com nome e foto do comprador
+      description: >-
+        Somente artesão. Os valores de itens e frete são cheios: o desconto de cupom é custeado pela plataforma e
+        aparece em `desconto`, sem reduzir o repasse.
       operationId: vendasArtesao
       responses:
         '200':
           description: OK
           content:
-            '*/*':
+            application/json:
               schema:
-                $ref: '#/components/schemas/Envelope'
+                $ref: '#/components/schemas/EnvelopeListaVendaArtesao'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+      security:
+        - bearer-jwt: []
   /api/v1/artesao/pedidos-pendentes:
     get:
       tags:
         - pedidos-controller
+      summary: Pedidos do artesão aguardando ação, com nome e foto do comprador
+      description: Somente artesão. `valor` é o total do pedido somado ao desconto custeado pela plataforma.
       operationId: pendentesArtesao
       responses:
         '200':
           description: OK
           content:
-            '*/*':
+            application/json:
               schema:
-                $ref: '#/components/schemas/Envelope'
+                $ref: '#/components/schemas/EnvelopeListaPedidoPendenteArtesao'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+      security:
+        - bearer-jwt: []
+  /api/v1/artesao/pedidos/{id}:
+    get:
+      tags:
+        - pedidos-controller
+      summary: Detalhe de uma venda para o artesão dono, com comprador e endereço de entrega
+      description: Somente o artesão dono do pedido.
+      operationId: pedidoArtesao
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvelopeVendaArtesao'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          description: '`SEM_PERMISSAO` — papel diferente de artesão ou pedido de outro ateliê.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+        '404':
+          description: '`PEDIDO_NAO_ENCONTRADO`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+      security:
+        - bearer-jwt: []
   /api/v1/videos/{id}/capa:
     get:
       tags:
@@ -1714,6 +2471,33 @@ paths:
                 $ref: '#/components/schemas/ApiResponseMediacaoResponse'
       security:
         - bearer-jwt: []
+  /api/v1/admin/mediacoes/{id}/cancelamento:
+    post:
+      tags:
+        - Mediações
+      summary: Comprador desiste da própria mediação ou administrador a encerra sem decisão, enquanto aberta ou em análise; repetir devolve a mediação já cancelada
+      operationId: cancelarMediacao
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: usuario
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/UsuarioAutenticado'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApiResponseMediacaoResponse'
+      security:
+        - bearer-jwt: []
   /api/v1/admin/mediacoes/{id}/decisao:
     post:
       tags:
@@ -1897,6 +2681,157 @@ paths:
                 $ref: '#/components/schemas/ApiResponseMediacaoResponse'
       security:
         - bearer-jwt: []
+  /api/v1/admin/videos:
+    get:
+      tags:
+        - Moderação de vídeos
+      summary: Vídeos para moderação (paginado)
+      description: >-
+        Somente administrador. `estado=todos` (padrão) traz publicados e suspensos; `publicada` traz só os visíveis ao
+        público (mais recentes primeiro); `suspensa` traz só os suspensos (suspensões mais recentes primeiro).
+      operationId: listarParaModeracao
+      parameters:
+        - name: estado
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - todos
+              - publicada
+              - suspensa
+            default: todos
+        - name: pagina
+          in: query
+          required: false
+          description: Página a partir de 0.
+          schema:
+            type: integer
+            format: int32
+            minimum: 0
+            default: 0
+        - name: tamanho
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseListVideoModeracaoResponse'
+        '400':
+          description: '`REQUISICAO_INVALIDA` — estado desconhecido ou paginação fora da faixa.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+      security:
+        - bearer-jwt: []
+  /api/v1/admin/videos/{id}/suspensao:
+    post:
+      tags:
+        - Moderação de vídeos
+      summary: Suspende o vídeo com motivo e avisa o artesão dono
+      description: >-
+        Somente administrador. O vídeo sai do público (continua visível ao dono, com `suspensao` preenchida) e o
+        artesão recebe uma notificação na conta; falha ao notificar não desfaz a suspensão.
+      operationId: suspender
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuspensaoVideoRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseVideoModeracaoResponse'
+        '400':
+          description: '`REQUISICAO_INVALIDA` — motivo ausente ou fora de 10 a 1000 caracteres.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '404':
+          description: '`VIDEO_NAO_ENCONTRADO`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+        '409':
+          description: '`VIDEO_JA_SUSPENSO`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+      security:
+        - bearer-jwt: []
+  /api/v1/admin/videos/{id}/reativacao:
+    post:
+      tags:
+        - Moderação de vídeos
+      summary: Reativa um vídeo suspenso e avisa o artesão dono
+      description: >-
+        Somente administrador. Sem corpo. O vídeo volta à situação que tinha (publicado ou rascunho) e o artesão
+        recebe uma notificação na conta.
+      operationId: reativar
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseVideoModeracaoResponse'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '404':
+          description: '`VIDEO_NAO_ENCONTRADO`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+        '409':
+          description: '`VIDEO_NAO_SUSPENSO`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+      security:
+        - bearer-jwt: []
   /api/v1/artesaos/{artesaoSlug}/reputacao:
     get:
       tags:
@@ -1921,6 +2856,10 @@ paths:
       tags:
         - Conversas
       summary: Conversas dos pedidos do artesão autenticado, com prévia e não lidas
+      description: >-
+        Somente artesão. Cada conversa traz o código curto do pedido (`codigo`, ex.: `#1A2B3C4D`, também usado em
+        `assunto`) e o comprador (`comprador.nome` e `comprador.imagem`, nulos quando o perfil não está disponível;
+        `pessoa` cai para "Comprador" e `retrato` repete a imagem).
       operationId: doArtesao
       parameters:
         - name: usuario
@@ -1965,6 +2904,13 @@ paths:
     post:
       tags:
         - evento-controller
+      summary: Organizador submete um evento para moderação
+      description: >-
+        Somente organizador. O evento nasce `PENDENTE` e não publicado. Endereço detalhado (`rua`, `numero`, `bairro`
+        obrigatórios; `cep`, `complemento`, `referencia` e `site` opcionais) e contato (`contatoNome` e
+        `contatoTelefone` obrigatórios, `contatoEmail` opcional) são gravados; o contato só aparece na moderação.
+        Idempotente por slug para o mesmo organizador: reenviar um slug já submetido pela mesma conta devolve o evento
+        existente (201, sem alterá-lo); o mesmo slug de outro organizador responde 409.
       operationId: criarEvento
       requestBody:
         content:
@@ -1973,16 +2919,35 @@ paths:
               $ref: '#/components/schemas/CriarEventoRequest'
         required: true
       responses:
-        '200':
-          description: OK
+        '201':
+          description: Submetido (ou reenvio do mesmo organizador).
           content:
-            '*/*':
+            application/json:
               schema:
-                $ref: '#/components/schemas/ApiResponseEventoResponse'
+                $ref: '#/components/schemas/ApiResponseEventoSubmetidoResponse'
+        '400':
+          description: '`REQUISICAO_INVALIDA`, com as mensagens por campo em `erro.campos`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '409':
+          description: '`EVENTO_JA_EXISTENTE` — slug em uso por outro organizador.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+      security:
+        - bearer-jwt: []
   /api/v1/eventos/{slug}:
     get:
       tags:
         - evento-controller
+      summary: Detalhe público de um evento aprovado
       operationId: consultarPorSlug
       parameters:
         - name: slug
@@ -1994,15 +2959,155 @@ paths:
         '200':
           description: OK
           content:
-            '*/*':
+            application/json:
               schema:
                 $ref: '#/components/schemas/ApiResponseEventoResponse'
+        '404':
+          description: '`RECURSO_NAO_ENCONTRADO`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+  /api/v1/admin/eventos:
+    get:
+      tags:
+        - Moderação de eventos
+      summary: Eventos em moderação por estado, com contato e solicitante
+      description: >-
+        Somente administrador. `solicitante` vem da conta do organizador no profile-service e fica nulo se ela não
+        puder ser consultada.
+      operationId: listarEventosEmModeracao
+      parameters:
+        - name: estado
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - PENDENTE
+              - APROVADO
+              - REJEITADO
+            default: PENDENTE
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseListEventoModeracaoResponse'
+        '400':
+          description: '`REQUISICAO_INVALIDA` — estado desconhecido.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+      security:
+        - bearer-jwt: []
+  /api/v1/admin/eventos/{slug}:
+    get:
+      tags:
+        - Moderação de eventos
+      summary: Detalhe de um evento para moderação, com contato e solicitante
+      description: Somente administrador.
+      operationId: detalharEventoEmModeracao
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseEventoModeracaoResponse'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '404':
+          description: '`RECURSO_NAO_ENCONTRADO`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+      security:
+        - bearer-jwt: []
+  /api/v1/admin/eventos/{slug}/decisao:
+    post:
+      tags:
+        - Moderação de eventos
+      summary: Aprova ou rejeita um evento pendente
+      description: Somente administrador. Rejeitar exige `motivo` (até 1000 caracteres).
+      operationId: decidirEvento
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisaoEventoRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseEventoModeracaoResponse'
+        '400':
+          description: '`REQUISICAO_INVALIDA` — decisão desconhecida ou motivo ausente ao rejeitar.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+        '401':
+          $ref: '#/components/responses/NaoAutenticado'
+        '403':
+          $ref: '#/components/responses/SemPermissao'
+        '404':
+          description: '`RECURSO_NAO_ENCONTRADO`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+        '409':
+          description: '`EVENTO_JA_DECIDIDO`'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespostaErro'
+      security:
+        - bearer-jwt: []
 components:
   securitySchemes:
     bearer-jwt:
       type: http
       scheme: bearer
       bearerFormat: JWT
+  responses:
+    NaoAutenticado:
+      description: '`NAO_AUTENTICADO` — token ausente, inválido ou expirado (respondido pelo gateway ou pelo serviço).'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RespostaErro'
+    SemPermissao:
+      description: '`SEM_PERMISSAO` — o papel da conta não é aceito nesta operação.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/RespostaErro'
   schemas:
     Criar:
       type: object
@@ -2290,8 +3395,17 @@ components:
           type: string
         rua:
           type: string
+        numero:
+          type:
+            - string
+            - 'null'
+        complemento:
+          type:
+            - string
+            - 'null'
         bairro:
           type: string
+          description: Bairro, cidade e UF separados por vírgula.
         cep:
           type: string
         principal:
@@ -2642,6 +3756,44 @@ components:
           type: boolean
         chavePix:
           type: string
+        aceitaRetirada:
+          type: boolean
+        aceitaEntregaLocal:
+          type: boolean
+        retiradaBairro:
+          type: string
+          description: Bairro mostrado aos compradores na opção de retirada (vazio quando não configurado).
+        retiradaCidade:
+          type: string
+          description: Cidade mostrada aos compradores na opção de retirada (vazio quando não configurado).
+    ConfiguracoesRequest:
+      type: object
+      additionalProperties: false
+      description: Todos os campos são opcionais; os ausentes mantêm o valor atual.
+      properties:
+        cepOrigem:
+          type: string
+        prazoPadraoDias:
+          type: integer
+          format: int32
+        aceitaEncomendas:
+          type: boolean
+        encomendasPausadas:
+          type: boolean
+        chavePix:
+          type: string
+        aceitaRetirada:
+          type: boolean
+          description: Exige `retiradaBairro` e `retiradaCidade` preenchidos.
+        aceitaEntregaLocal:
+          type: boolean
+          description: Exige `cepOrigem` preenchido.
+        retiradaBairro:
+          type: string
+          maxLength: 80
+        retiradaCidade:
+          type: string
+          maxLength: 80
     CadastroPublicoRespostaListEndereco:
       type: object
       properties:
@@ -2667,15 +3819,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PerfilArtesaoResponse'
-        erro:
-          $ref: '#/components/schemas/Erro'
-    CadastroPublicoRespostaListSolicitacao:
-      type: object
-      properties:
-        dados:
-          type: array
-          items:
-            $ref: '#/components/schemas/Solicitacao'
         erro:
           $ref: '#/components/schemas/Erro'
     Envelope:
@@ -2706,6 +3849,11 @@ components:
         enderecoId:
           type: string
           format: uuid
+        cupom:
+          type: string
+          description: >-
+            Código do cupom (normalizado para maiúsculas). Ausente ou em branco aplica a promoção automática de maior
+            desconto, se houver.
     Item:
       type: object
       properties:
@@ -2775,6 +3923,13 @@ components:
           type: string
         situacao:
           type: string
+        suspensao:
+          description: >-
+            Preenchida quando a administração suspendeu o vídeo. Vídeo suspenso não aparece ao público; só o dono o
+            vê, com o motivo.
+          oneOf:
+            - $ref: '#/components/schemas/SuspensaoVideo'
+            - type: 'null'
     ApiResponseListString:
       type: object
       properties:
@@ -2822,6 +3977,11 @@ components:
           format: uuid
         autor:
           type: string
+        autorImagem:
+          type:
+            - string
+            - 'null'
+          description: URL da foto de perfil do autor; nula quando não há foto ou o profile não respondeu.
         texto:
           type: string
         quando:
@@ -2928,6 +4088,11 @@ components:
           type: string
         autor:
           type: string
+        autorImagem:
+          type:
+            - string
+            - 'null'
+          description: URL da foto de perfil de quem perguntou; nula quando não há foto ou o profile não respondeu.
         usuarioId:
           type: string
           format: uuid
@@ -2976,6 +4141,8 @@ components:
           type: string
         emAnalise:
           type: boolean
+        cancelada:
+          type: boolean
         partes:
           type: string
         aberta:
@@ -2986,6 +4153,8 @@ components:
           type: integer
           format: int32
         ultimoErro:
+          type: string
+        canceladaEm:
           type: string
     RespostaRequest:
       type: object
@@ -3080,10 +4249,17 @@ components:
         id:
           type: string
           format: uuid
+          description: Id do pedido.
+        codigo:
+          type: string
+          description: Código curto do pedido.
+          example: '#1A2B3C4D'
         pessoa:
           type: string
+          description: Nome do comprador ou "Comprador" quando indisponível.
         assunto:
           type: string
+          example: 'Pedido #1A2B3C4D'
         previa:
           type: string
         quando:
@@ -3091,7 +4267,12 @@ components:
         naoLida:
           type: boolean
         retrato:
-          type: string
+          type:
+            - string
+            - 'null'
+          description: Foto do comprador (mesmo valor de `comprador.imagem`).
+        comprador:
+          $ref: '#/components/schemas/CompradorResumo'
     ApiResponseListMediacaoResponse:
       type: object
       properties:
@@ -3107,21 +4288,93 @@ components:
         slug:
           type: string
           maxLength: 255
-          minLength: 0
+          description: Identificador do evento; reenviar o mesmo slug pela mesma conta devolve o evento já submetido.
         nome:
           type: string
           maxLength: 255
-          minLength: 0
         tipo:
           type: string
-          maxLength: 130
-          minLength: 0
+          enum:
+            - feira
+            - festival
+            - exposicao
+            - oficina
         organizador:
           type: string
           maxLength: 255
-          minLength: 0
         descricao:
           type: string
+        periodo:
+          type: string
+          description: Datas do evento em texto livre.
+        horario:
+          type: string
+        entrada:
+          type: string
+          example: Gratuita
+        cidade:
+          type: string
+          maxLength: 150
+        local:
+          type: string
+          maxLength: 255
+        endereco:
+          type: string
+          maxLength: 500
+        cep:
+          type: string
+          pattern: ^\s*(\d{5}-?\d{3})?\s*$
+          description: Opcional; gravado como 00000-000.
+        rua:
+          type: string
+          maxLength: 200
+        numero:
+          type: string
+          maxLength: 20
+          description: Número do local ou S/N.
+        bairro:
+          type: string
+          maxLength: 120
+        complemento:
+          type: string
+          maxLength: 120
+        referencia:
+          type: string
+          maxLength: 200
+          description: Ponto de referência.
+        site:
+          type: string
+          maxLength: 300
+          description: Link começando com http:// ou https://.
+        contatoNome:
+          type: string
+          maxLength: 120
+        contatoTelefone:
+          type: string
+          maxLength: 20
+          description: Telefone com DDD, ao menos 10 dígitos.
+        contatoEmail:
+          type: string
+          format: email
+          maxLength: 160
+        lat:
+          type: number
+          format: double
+          maximum: 90
+          minimum: -90
+        lng:
+          type: number
+          format: double
+          maximum: 180
+          minimum: -180
+        artesaos:
+          type: array
+          items:
+            type: string
+        coletivos:
+          type: array
+          items:
+            type: string
         dataInicio:
           type: string
           format: date
@@ -3134,42 +4387,28 @@ components:
         horarioFim:
           type: string
           format: time-local
-        entrada:
-          type: string
-          maxLength: 255
-          minLength: 0
-        cidade:
-          type: string
-          maxLength: 150
-          minLength: 0
-        local:
-          type: string
-          maxLength: 255
-          minLength: 0
-        endereco:
-          type: string
-          maxLength: 500
-          minLength: 0
-        latitude:
-          type: number
-          format: double
-          maximum: 90
-          minimum: -90
-        longitude:
-          type: number
-          format: double
-          maximum: 180
-          minimum: -180
+        criadoPorVoce:
+          type: boolean
       required:
-        - cidade
-        - endereco
-        - latitude
-        - local
-        - longitude
-        - nome
-        - organizador
         - slug
+        - nome
         - tipo
+        - organizador
+        - descricao
+        - periodo
+        - entrada
+        - cidade
+        - local
+        - endereco
+        - rua
+        - numero
+        - bairro
+        - contatoNome
+        - contatoTelefone
+        - lat
+        - lng
+        - artesaos
+        - coletivos
     ApiResponseEventoResponse:
       type: object
       properties:
@@ -3179,10 +4418,8 @@ components:
           $ref: '#/components/schemas/ApiError'
     EventoResponse:
       type: object
+      description: Dados públicos do evento; o contato e o solicitante só aparecem em EventoModeracaoResponse.
       properties:
-        id:
-          type: integer
-          format: int64
         slug:
           type: string
         nome:
@@ -3193,18 +4430,10 @@ components:
           type: string
         descricao:
           type: string
-        dataInicio:
+        periodo:
           type: string
-          format: date
-        dataFim:
+        horario:
           type: string
-          format: date
-        horarioInicio:
-          type: string
-          format: time-local
-        horarioFim:
-          type: string
-          format: time-local
         entrada:
           type: string
         cidade:
@@ -3213,12 +4442,48 @@ components:
           type: string
         endereco:
           type: string
+        cep:
+          type:
+            - string
+            - 'null'
+        rua:
+          type:
+            - string
+            - 'null'
+        numero:
+          type:
+            - string
+            - 'null'
+        bairro:
+          type:
+            - string
+            - 'null'
+        complemento:
+          type:
+            - string
+            - 'null'
+        referencia:
+          type:
+            - string
+            - 'null'
+        site:
+          type:
+            - string
+            - 'null'
         lat:
           type: number
           format: double
         lng:
           type: number
           format: double
+        artesaos:
+          type: array
+          items:
+            type: string
+        coletivos:
+          type: array
+          items:
+            type: string
     ApiResponseListEventoResponse:
       type: object
       properties:
@@ -3226,5 +4491,905 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/EventoResponse'
+        erro:
+          $ref: '#/components/schemas/ApiError'
+    EventoSubmetidoResponse:
+      type: object
+      properties:
+        slug:
+          type: string
+        status:
+          type: string
+          enum:
+            - PENDENTE
+            - APROVADO
+            - REJEITADO
+    ApiResponseEventoSubmetidoResponse:
+      type: object
+      properties:
+        dados:
+          $ref: '#/components/schemas/EventoSubmetidoResponse'
+        erro:
+          $ref: '#/components/schemas/ApiError'
+    ContatoEvento:
+      type: object
+      properties:
+        nome:
+          type:
+            - string
+            - 'null'
+        telefone:
+          type:
+            - string
+            - 'null'
+        email:
+          type:
+            - string
+            - 'null'
+    SolicitanteEvento:
+      type: object
+      description: Conta do organizador que submeteu o evento.
+      properties:
+        id:
+          type: string
+          format: uuid
+        nome:
+          type: string
+        email:
+          type: string
+    EventoModeracaoResponse:
+      type: object
+      properties:
+        evento:
+          $ref: '#/components/schemas/EventoResponse'
+        status:
+          type: string
+          enum:
+            - PENDENTE
+            - APROVADO
+            - REJEITADO
+        publicado:
+          type: boolean
+        organizadorId:
+          type:
+            - string
+            - 'null'
+          format: uuid
+        submetidoEm:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        decididoPor:
+          type:
+            - string
+            - 'null'
+          format: uuid
+        decididoEm:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        motivo:
+          type:
+            - string
+            - 'null'
+          description: Motivo da rejeição.
+        contato:
+          $ref: '#/components/schemas/ContatoEvento'
+        solicitante:
+          description: Nulo quando a conta do organizador não pôde ser consultada.
+          oneOf:
+            - $ref: '#/components/schemas/SolicitanteEvento'
+            - type: 'null'
+    ApiResponseEventoModeracaoResponse:
+      type: object
+      properties:
+        dados:
+          $ref: '#/components/schemas/EventoModeracaoResponse'
+        erro:
+          $ref: '#/components/schemas/ApiError'
+    ApiResponseListEventoModeracaoResponse:
+      type: object
+      properties:
+        dados:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventoModeracaoResponse'
+        erro:
+          $ref: '#/components/schemas/ApiError'
+    DecisaoEventoRequest:
+      type: object
+      properties:
+        decisao:
+          type: string
+          enum:
+            - aprovar
+            - rejeitar
+        motivo:
+          type: string
+          maxLength: 1000
+          description: Obrigatório ao rejeitar.
+      required:
+        - decisao
+    ErroComCampos:
+      type: object
+      properties:
+        codigo:
+          type: string
+        mensagem:
+          type: string
+        campos:
+          type: object
+          description: Mensagem por campo, quando o erro é de validação.
+          additionalProperties:
+            type: string
+    RespostaErro:
+      type: object
+      properties:
+        dados:
+          type: 'null'
+        erro:
+          $ref: '#/components/schemas/ErroComCampos'
+    EnderecoRequest:
+      type: object
+      properties:
+        apelido:
+          type: string
+          maxLength: 80
+        rua:
+          type: string
+          maxLength: 255
+        numero:
+          type: string
+          maxLength: 20
+        complemento:
+          type: string
+          maxLength: 100
+        bairro:
+          type: string
+          maxLength: 255
+          description: Bairro, cidade e UF separados por vírgula.
+          example: Centro, Recife, PE
+        cep:
+          type: string
+          pattern: ^[0-9]{5}-?[0-9]{3}$
+      required:
+        - apelido
+        - rua
+        - bairro
+        - cep
+    EnderecoAtualizacaoRequest:
+      type: object
+      description: Todos os campos são opcionais; os ausentes mantêm o valor atual.
+      properties:
+        apelido:
+          type: string
+          maxLength: 80
+        rua:
+          type: string
+          maxLength: 255
+        numero:
+          type:
+            - string
+            - 'null'
+          maxLength: 20
+        complemento:
+          type:
+            - string
+            - 'null'
+          maxLength: 100
+        bairro:
+          type: string
+          maxLength: 255
+        cep:
+          type: string
+          pattern: ^[0-9]{5}-?[0-9]{3}$
+        principal:
+          type: boolean
+    RespostaPaginadaSolicitacao:
+      type: object
+      properties:
+        dados:
+          type: array
+          items:
+            $ref: '#/components/schemas/Solicitacao'
+        erro:
+          $ref: '#/components/schemas/Erro'
+        paginacao:
+          $ref: '#/components/schemas/PaginacaoResponse'
+    ContaAdmin:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        nome:
+          type: string
+        email:
+          type: string
+        papel:
+          type: string
+          enum:
+            - comprador
+            - artesao
+            - admin
+            - organizador
+        imagem:
+          type:
+            - string
+            - 'null'
+    RespostaPaginadaContaAdmin:
+      type: object
+      properties:
+        dados:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContaAdmin'
+        erro:
+          $ref: '#/components/schemas/Erro'
+        paginacao:
+          $ref: '#/components/schemas/PaginacaoResponse'
+    CadastroPublicoRespostaContaAdmin:
+      type: object
+      properties:
+        dados:
+          $ref: '#/components/schemas/ContaAdmin'
+        erro:
+          $ref: '#/components/schemas/Erro'
+    AlterarPapelRequisicao:
+      type: object
+      properties:
+        papel:
+          type: string
+          enum:
+            - organizador
+            - comprador
+      required:
+        - papel
+    Notificacao:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tipo:
+          type: string
+          description: Categoria em snake_case, por exemplo `video_suspenso`.
+        titulo:
+          type: string
+        mensagem:
+          type: string
+        link:
+          type:
+            - string
+            - 'null'
+          description: Caminho relativo do front (começa com /).
+        lida:
+          type: boolean
+        criadaEm:
+          type: string
+          format: date-time
+    CaixaNotificacoes:
+      type: object
+      properties:
+        itens:
+          type: array
+          items:
+            $ref: '#/components/schemas/Notificacao'
+        naoLidas:
+          type: integer
+          format: int32
+    CadastroPublicoRespostaCaixaNotificacoes:
+      type: object
+      properties:
+        dados:
+          $ref: '#/components/schemas/CaixaNotificacoes'
+        erro:
+          $ref: '#/components/schemas/Erro'
+    CupomRequest:
+      type: object
+      description: >-
+        Sem `codigo`, o cadastro é uma promoção automática. Em `frete_gratis` o `valor` é ignorado e o desconto é o
+        frete, limitado a `descontoMaximo`.
+      properties:
+        codigo:
+          type:
+            - string
+            - 'null'
+          pattern: ^[A-Z0-9][A-Z0-9_-]{2,39}$
+          description: 3 a 40 letras sem acento, números, hífen ou sublinhado; normalizado para maiúsculas.
+        descricao:
+          type: string
+          minLength: 3
+          maxLength: 200
+        tipo:
+          type: string
+          enum:
+            - percentual
+            - valor_fixo
+            - frete_gratis
+        valor:
+          type: number
+          description: Percentual (maior que 0 e até 100) ou valor em reais; até 2 casas decimais.
+        descontoMaximo:
+          type:
+            - number
+            - 'null'
+          description: Teto do desconto em reais (opcional).
+        pedidoMinimo:
+          type: number
+          minimum: 0
+          default: 0
+          description: Mínimo do subtotal das peças.
+        inicio:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        fim:
+          type:
+            - string
+            - 'null'
+          format: date-time
+          description: Precisa ser depois de `inicio`.
+        limiteUsos:
+          type:
+            - integer
+            - 'null'
+          format: int32
+          minimum: 1
+          description: Nulo é ilimitado.
+        limitePorComprador:
+          type:
+            - integer
+            - 'null'
+          format: int32
+          minimum: 1
+        ativo:
+          type: boolean
+          default: true
+      required:
+        - descricao
+        - tipo
+    CupomResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        codigo:
+          type:
+            - string
+            - 'null'
+        automatico:
+          type: boolean
+          description: Verdadeiro para promoção automática (sem código).
+        descricao:
+          type: string
+        tipo:
+          type: string
+          enum:
+            - percentual
+            - valor_fixo
+            - frete_gratis
+        valor:
+          type: number
+        descontoMaximo:
+          type:
+            - number
+            - 'null'
+        pedidoMinimo:
+          type: number
+        inicio:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        fim:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        limiteUsos:
+          type:
+            - integer
+            - 'null'
+          format: int32
+        limitePorComprador:
+          type:
+            - integer
+            - 'null'
+          format: int32
+        usos:
+          type: integer
+          format: int32
+        ativo:
+          type: boolean
+        situacao:
+          type: string
+          enum:
+            - ativo
+            - agendado
+            - expirado
+            - esgotado
+            - inativo
+        custeadoPor:
+          type: string
+          enum:
+            - plataforma
+        criadoEm:
+          type: string
+          format: date-time
+        atualizadoEm:
+          type: string
+          format: date-time
+    EnvelopeCupom:
+      type: object
+      properties:
+        dados:
+          $ref: '#/components/schemas/CupomResponse'
+        erro:
+          type: 'null'
+    EnvelopeListaCupom:
+      type: object
+      properties:
+        dados:
+          type: array
+          items:
+            $ref: '#/components/schemas/CupomResponse'
+        erro:
+          type: 'null'
+    SituacaoCupomRequest:
+      type: object
+      properties:
+        ativo:
+          type: boolean
+      required:
+        - ativo
+    SimulacaoCupomRequest:
+      type: object
+      properties:
+        itens:
+          type: array
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/Item'
+        cupom:
+          type:
+            - string
+            - 'null'
+          description: Código do cupom; ausente ou em branco busca a melhor promoção automática.
+        frete:
+          type:
+            - number
+            - 'null'
+          minimum: 0
+          maximum: 10000
+          description: Valor da entrega escolhida, para calcular cupons de frete grátis.
+      required:
+        - itens
+    PreviaCupom:
+      type: object
+      properties:
+        codigo:
+          type:
+            - string
+            - 'null'
+        descricao:
+          type: string
+        tipo:
+          type: string
+          enum:
+            - percentual
+            - valor_fixo
+            - frete_gratis
+        automatico:
+          type: boolean
+        subtotalProdutos:
+          type: number
+        descontoProdutos:
+          type: number
+        descontoFrete:
+          type: number
+        custeadoPor:
+          type: string
+          enum:
+            - plataforma
+    EnvelopePreviaCupom:
+      type: object
+      properties:
+        dados:
+          description: Nulo quando não há cupom informado nem promoção automática aplicável.
+          oneOf:
+            - $ref: '#/components/schemas/PreviaCupom'
+            - type: 'null'
+        erro:
+          type: 'null'
+    DescontoPedido:
+      type: object
+      description: Desconto custeado pela plataforma; não reduz o repasse do artesão.
+      properties:
+        cupom:
+          type:
+            - string
+            - 'null'
+          description: Código usado; nulo em promoção automática.
+        descricao:
+          type: string
+        automatico:
+          type: boolean
+        produtos:
+          type: number
+        frete:
+          type: number
+        total:
+          type: number
+        custeadoPor:
+          type: string
+          enum:
+            - plataforma
+        valorSemDesconto:
+          type: number
+          description: Total do pedido somado ao desconto.
+    ItemPedido:
+      type: object
+      properties:
+        slug:
+          type: string
+        quantidade:
+          type: integer
+          format: int32
+        preco:
+          type: number
+    EtapaPedido:
+      type: object
+      properties:
+        estado:
+          type: string
+        titulo:
+          type: string
+        detalhe:
+          type: string
+        nota:
+          type: string
+          description: Ausente em etapas inferidas.
+        criadaEm:
+          type: string
+          format: date-time
+          description: Ausente em etapas inferidas.
+        concluida:
+          type: boolean
+        atual:
+          type: boolean
+    PedidoResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        compradorId:
+          type: string
+          format: uuid
+        artesaoId:
+          type: string
+          format: uuid
+        pecaSlug:
+          type: string
+        compradorNome:
+          type: string
+        data:
+          type: string
+          description: Data de criação em dd/MM/yyyy.
+        estado:
+          type: string
+        total:
+          type: number
+          description: Valor cobrado do comprador, já com o desconto.
+        avaliado:
+          type: boolean
+        simulado:
+          type: boolean
+        motivoEncerramento:
+          type:
+            - string
+            - 'null'
+        historicoInferido:
+          type: boolean
+          description: Presente (true) só quando o histórico de etapas foi inferido.
+        etapas:
+          type: array
+          items:
+            $ref: '#/components/schemas/EtapaPedido'
+        itens:
+          type: array
+          items:
+            $ref: '#/components/schemas/ItemPedido'
+        frete:
+          type: number
+          description: Valor cheio do frete.
+        rastreio:
+          type:
+            - string
+            - 'null'
+        transportadora:
+          type:
+            - string
+            - 'null'
+        linkRastreio:
+          type:
+            - string
+            - 'null'
+        freteOpcao:
+          type:
+            - string
+            - 'null'
+          description: Id da opção escolhida, por exemplo `retirada-atelie` ou `entrega-local`.
+        freteProvedor:
+          type:
+            - string
+            - 'null'
+          description: '`balaio_local` nas opções de retirada e entrega local.'
+        previsaoEntrega:
+          type:
+            - string
+            - 'null'
+        desconto:
+          $ref: '#/components/schemas/DescontoPedido'
+          description: Presente só quando o pedido teve cupom ou promoção.
+    PedidoComPagamento:
+      allOf:
+        - $ref: '#/components/schemas/PedidoResponse'
+        - type: object
+          properties:
+            estadoPagamento:
+              type: string
+            checkoutUrl:
+              type:
+                - string
+                - 'null'
+    EnderecoPedido:
+      type: object
+      properties:
+        cep:
+          type: string
+        endereco:
+          type: string
+          description: Logradouro, número, complemento e bairro.
+        cidade:
+          type: string
+        estado:
+          type: string
+          description: UF
+    PedidoComEndereco:
+      allOf:
+        - $ref: '#/components/schemas/PedidoComPagamento'
+        - type: object
+          properties:
+            endereco:
+              $ref: '#/components/schemas/EnderecoPedido'
+    EnvelopePedidoComEndereco:
+      type: object
+      properties:
+        dados:
+          $ref: '#/components/schemas/PedidoComEndereco'
+        erro:
+          type: 'null'
+    EnvelopeListaPedidoComPagamento:
+      type: object
+      properties:
+        dados:
+          type: array
+          items:
+            $ref: '#/components/schemas/PedidoComPagamento'
+        erro:
+          type: 'null'
+    CompradorResumo:
+      type: object
+      description: Nome e foto do comprador; ambos nulos quando o perfil não está disponível.
+      properties:
+        nome:
+          type:
+            - string
+            - 'null'
+        imagem:
+          type:
+            - string
+            - 'null'
+    VendaArtesao:
+      allOf:
+        - $ref: '#/components/schemas/PedidoResponse'
+        - type: object
+          properties:
+            comprador:
+              $ref: '#/components/schemas/CompradorResumo'
+            enderecoEntrega:
+              $ref: '#/components/schemas/EnderecoPedido'
+              description: Só em `GET /api/v1/artesao/pedidos/{id}`, para o artesão dono, quando o pedido tem endereço.
+    PedidoPendenteArtesao:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        pecaSlug:
+          type: string
+        comprador:
+          $ref: '#/components/schemas/CompradorResumo'
+        quando:
+          type: string
+          description: Data em dd/MM/yyyy.
+        valor:
+          type: number
+          description: Total do pedido somado ao desconto custeado pela plataforma.
+    EnvelopeListaVendaArtesao:
+      type: object
+      properties:
+        dados:
+          type: array
+          items:
+            $ref: '#/components/schemas/VendaArtesao'
+        erro:
+          type: 'null'
+    EnvelopeVendaArtesao:
+      type: object
+      properties:
+        dados:
+          $ref: '#/components/schemas/VendaArtesao'
+        erro:
+          type: 'null'
+    EnvelopeListaPedidoPendenteArtesao:
+      type: object
+      properties:
+        dados:
+          type: array
+          items:
+            $ref: '#/components/schemas/PedidoPendenteArtesao'
+        erro:
+          type: 'null'
+    OpcaoFrete:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Id usado em `freteId` no checkout; `entrega-local` e `retirada-atelie` para as opções locais.
+        nome:
+          type: string
+        prazo:
+          type: string
+        prazoDiasMinimo:
+          type:
+            - integer
+            - 'null'
+          format: int32
+        prazoDiasMaximo:
+          type:
+            - integer
+            - 'null'
+          format: int32
+        valor:
+          type: number
+        transportadora:
+          type:
+            - string
+            - 'null'
+        provedor:
+          type: string
+          description: Provedor da cotação; `balaio_local` nas opções locais.
+        modalidade:
+          type: string
+          enum:
+            - transportadora
+            - retirada
+            - entrega_local
+        detalhe:
+          type:
+            - string
+            - 'null'
+          description: Texto explicativo das opções locais (bairro e cidade na retirada).
+    EnvelopeListaOpcaoFrete:
+      type: object
+      properties:
+        dados:
+          type: array
+          items:
+            $ref: '#/components/schemas/OpcaoFrete'
+        erro:
+          type: 'null'
+    SuspensaoVideo:
+      type: object
+      properties:
+        motivo:
+          type: string
+        suspensoEm:
+          type: string
+          format: date-time
+    SuspensaoVideoRequest:
+      type: object
+      properties:
+        motivo:
+          type: string
+          minLength: 10
+          maxLength: 1000
+      required:
+        - motivo
+    VideoModeracaoResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        artesao:
+          type: string
+        peca:
+          type:
+            - string
+            - 'null'
+        legenda:
+          type: string
+        etiquetas:
+          type: array
+          items:
+            type: string
+        duracao:
+          type:
+            - string
+            - 'null'
+        visualizacoes:
+          type: integer
+          format: int64
+        criadoEm:
+          type: string
+          format: date-time
+        publicadoEm:
+          type:
+            - string
+            - 'null'
+          format: date-time
+        capa:
+          type:
+            - string
+            - 'null'
+        url:
+          type:
+            - string
+            - 'null'
+        situacao:
+          type: string
+          enum:
+            - publicada
+            - rascunho
+          description: Situação definida pelo artesão.
+        estado:
+          type: string
+          enum:
+            - publicada
+            - rascunho
+            - suspensa
+          description: Estado efetivo para moderação (`suspensa` quando há suspensão).
+        suspensao:
+          oneOf:
+            - $ref: '#/components/schemas/SuspensaoVideo'
+            - type: 'null'
+        suspensoPor:
+          type:
+            - string
+            - 'null'
+          format: uuid
+          description: Administrador que suspendeu.
+    ApiResponseVideoModeracaoResponse:
+      type: object
+      properties:
+        dados:
+          $ref: '#/components/schemas/VideoModeracaoResponse'
+        erro:
+          $ref: '#/components/schemas/ApiError'
+    ApiResponseListVideoModeracaoResponse:
+      type: object
+      properties:
+        dados:
+          type: array
+          items:
+            $ref: '#/components/schemas/VideoModeracaoResponse'
         erro:
           $ref: '#/components/schemas/ApiError'

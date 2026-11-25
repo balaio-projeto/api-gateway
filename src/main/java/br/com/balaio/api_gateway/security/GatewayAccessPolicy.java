@@ -40,6 +40,9 @@ final class GatewayAccessPolicy {
         if ("POST".equals(method) && path.equals("/api/v1/eventos")) {
             return Access.ORGANIZADOR;
         }
+        if ("POST".equals(method) && path.matches("/api/v1/admin/mediacoes/[^/]+/cancelamento")) {
+            return Access.AUTHENTICATED;
+        }
         if (path.equals("/api/v1/admin") || path.startsWith("/api/v1/admin/")) {
             return Access.ADMIN;
         }

@@ -56,6 +56,7 @@ PATCH,/api/v1/pedidos/{id}/estado,commerce,ARTESAO,/dashboard;/dashboard/sales,P
 PATCH,/api/v1/pedidos/{id}/recusar,commerce,ARTESAO,/dashboard,PI-45;PI-193
 PATCH,/api/v1/pedidos/{id}/cancelar,commerce,AUTHENTICATED,/orders/[id],PI-236;PI-193
 GET,/api/v1/artesao/pedidos-pendentes,commerce,ARTESAO,/dashboard,PI-43;PI-191
+GET,/api/v1/artesao/pedidos/{id},commerce,ARTESAO,/dashboard/orders/[id],PI-226
 GET,/api/v1/artesao/vendas,commerce,ARTESAO,/dashboard;/dashboard/sales,PI-235;PI-246
 GET,/api/v1/artesao/vendas/relatorio,commerce,ARTESAO,/dashboard/sales,PI-49;PI-197
 GET,/api/v1/artesao/painel/resumo,commerce,ARTESAO,/dashboard,PI-50;PI-248
@@ -89,6 +90,10 @@ POST,/api/v1/admin/mediacoes,community,AUTHENTICATED,/orders/[id]/mediation,PI-2
 PATCH,/api/v1/admin/mediacoes/{id},community,ADMIN,/admin/mediations,PI-239;PI-195
 POST,/api/v1/admin/mediacoes/{id}/decisao,community,ADMIN,/admin/mediations,PI-239;PI-195
 POST,/api/v1/admin/mediacoes/{id}/reprocessar-entrega,community,ADMIN,/admin/mediations,PI-239;PI-195
+POST,/api/v1/admin/mediacoes/{id}/cancelamento,community,AUTHENTICATED,/orders/[id]/mediation;/admin/mediations,PI-226
+GET,/api/v1/admin/videos,community,ADMIN,/admin/videos,PI-226
+POST,/api/v1/admin/videos/{id}/suspensao,community,ADMIN,/admin/videos,PI-226
+POST,/api/v1/admin/videos/{id}/reativacao,community,ADMIN,/admin/videos,PI-226
 GET,/api/v1/estado/favoritos,community,AUTHENTICATED,/favorites,PI-237;PI-186
 PUT,/api/v1/estado/favoritos,community,PUBLIC,/favorites;/pieces/[slug],PI-237;PI-186
 GET,/api/v1/estado/historicoBusca,community,AUTHENTICATED,/search,PI-211
@@ -104,3 +109,12 @@ GET,/api/v1/eventos/{slug},events,PUBLIC,/events/[slug],PI-240;PI-199
 GET,/api/v1/admin/eventos,events,ADMIN,/admin/events,PI-242;PI-206;PI-205
 GET,/api/v1/admin/eventos/{slug},events,ADMIN,/admin/events,PI-242;PI-206;PI-205
 POST,/api/v1/admin/eventos/{slug}/decisao,events,ADMIN,/admin/events,PI-242;PI-206;PI-205
+GET,/api/v1/notificacoes,profile,AUTHENTICATED,menu da conta,PI-226
+POST,/api/v1/notificacoes/leitura,profile,AUTHENTICATED,menu da conta,PI-226
+PATCH,/api/v1/notificacoes/{id}/leitura,profile,AUTHENTICATED,menu da conta,PI-226
+POST,/api/v1/checkout/cupom,commerce,AUTHENTICATED,/checkout,PI-226
+GET,/api/v1/admin/cupons,commerce,ADMIN,/admin/discounts,PI-226
+POST,/api/v1/admin/cupons,commerce,ADMIN,/admin/discounts,PI-226
+GET,/api/v1/admin/cupons/{id},commerce,ADMIN,/admin/discounts,PI-226
+PUT,/api/v1/admin/cupons/{id},commerce,ADMIN,/admin/discounts,PI-226
+PATCH,/api/v1/admin/cupons/{id}/situacao,commerce,ADMIN,/admin/discounts,PI-226
